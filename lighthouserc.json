@@ -1,0 +1,44 @@
+{
+  "ci": {
+    "collect": {
+      "url": ["http://127.0.0.1:4173/"],
+      "startServerCommand": "npx http-server docs -p 4173 -c-1 -a 127.0.0.1",
+      "startServerReadyPattern": "Available on:",
+      "numberOfRuns": 3,
+      "settings": {
+        "preset": "desktop",
+        "skipAudits": ["uses-http2", "redirects-http"]
+      }
+    },
+    "assert": {
+      "assertions": {
+        "categories:performance": ["warn", { "minScore": 0.85 }],
+        "categories:accessibility": ["error", { "minScore": 0.9 }],
+        "categories:best-practices": ["warn", { "minScore": 0.9 }],
+        "categories:seo": ["warn", { "minScore": 0.9 }],
+
+        "cumulative-layout-shift": ["error", { "maxNumericValue": 0.1 }],
+        "first-contentful-paint": ["warn", { "maxNumericValue": 2500 }],
+        "largest-contentful-paint": ["warn", { "maxNumericValue": 4000 }],
+        "interactive": ["warn", { "maxNumericValue": 5000 }],
+
+        "color-contrast": ["error", { "minScore": 1 }],
+
+        "resource-summary:document:size": ["warn", { "maxNumericValue": 50000 }],
+        "resource-summary:stylesheet:size": ["warn", { "maxNumericValue": 50000 }],
+        "resource-summary:script:size": ["warn", { "maxNumericValue": 300000 }],
+        "resource-summary:image:size": ["error", { "maxNumericValue": 1500000 }],
+        "resource-summary:font:size": ["warn", { "maxNumericValue": 100000 }],
+        "resource-summary:third-party:size": ["warn", { "maxNumericValue": 200000 }],
+        "resource-summary:total:size": ["error", { "maxNumericValue": 3000000 }],
+
+        "resource-summary:third-party:count": ["warn", { "maxNumericValue": 5 }],
+        "resource-summary:image:count": ["warn", { "maxNumericValue": 10 }],
+        "resource-summary:font:count": ["warn", { "maxNumericValue": 4 }]
+      }
+    },
+    "upload": {
+      "target": "temporary-public-storage"
+    }
+  }
+}

@@ -70,3 +70,11 @@ GWPvsStrength.png
 
 # Planning files
 *.plan.md
+
+# E2E / Playwright / Lighthouse CI
+node_modules/
+playwright-report/
+test-results/
+.lighthouseci/
+blob-report/
+playwright/.cache/
