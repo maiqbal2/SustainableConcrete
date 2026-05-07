@@ -5,6 +5,10 @@
   --text: #1a1a1a;
   --text-secondary: #555;
   --accent: #2563eb;
+  /* Foreground text color to use on top of --accent background.
+     White on #2563eb in light mode = ~5.2:1 (passes WCAG AA).
+     Set explicitly so dark-mode override is a single-property change. */
+  --accent-on: #ffffff;
   --band: rgba(37, 99, 235, 0.18);
   --pareto: #e11d48;
   --observation: #475569;
@@ -22,6 +26,8 @@
   --text: #e2e2e2;
   --text-secondary: #aaa;
   --accent: #60a5fa;
+  /* White on #60a5fa is only 2.54:1 (fails WCAG AA). Use dark text for ~8.2:1. */
+  --accent-on: #0f0f1a;
   --band: rgba(96, 165, 250, 0.2);
   --pareto: #fb7185;
   --observation: #94a3b8;
@@ -200,7 +206,7 @@ body {
 }
 .cite-group .cite-btn:hover {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-on);
 }
 .cite-label {
   font-size: 0.72rem;
@@ -627,7 +633,7 @@ h2 {
 }
 .toggle-btn.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-on);
   border-color: var(--accent);
 }
 .toggle-btn:hover:not(.active) {
@@ -1030,7 +1036,7 @@ a.ref-link {
 }
 .mobile-panel-header button.active {
   background: var(--accent);
-  color: #fff;
+  color: var(--accent-on);
   border-color: var(--accent);
 }
 .mobile-panel-header button:hover:not(.active) {

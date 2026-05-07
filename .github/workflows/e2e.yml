@@ -1,0 +1,101 @@
+# Playwright end-to-end tests for the BOxCrete website.
+# Runs on PRs that touch the website or the test specs themselves.
+# See test/e2e/README.md for the catalogue of invariants and how to add new tests.
+
+name: E2E (Playwright)
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'test/e2e/**'
+      - 'playwright.config.ts'
+      - 'package.json'
+      - '.github/workflows/e2e.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docs/**'
+      - 'test/e2e/**'
+      - 'playwright.config.ts'
+      - 'package.json'
+      - '.github/workflows/e2e.yml'
+  workflow_dispatch:
+    inputs:
+      update_snapshots:
+        description: 'Regenerate visual snapshots and upload as an artifact'
+        required: false
+        default: 'false'
+
+# Restrict GITHUB_TOKEN to read-only on repo contents.
+permissions:
+  contents: read
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [desktop, mobile]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Cache Playwright browsers
+        id: pw-cache
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('package-lock.json') }}
+
+      - name: Install Playwright browsers
+        if: steps.pw-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install Chromium system deps (cached browsers path)
+        if: steps.pw-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - name: Run Playwright tests
+        run: npx playwright test --project=${{ matrix.project }}
+        env:
+          CI: true
+
+      - name: Update snapshots (manual dispatch only)
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.update_snapshots == 'true' }}
+        run: npx playwright test --project=${{ matrix.project }} --update-snapshots
+        env:
+          CI: true
+
+      - name: Upload Playwright report on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report-${{ matrix.project }}
+          path: |
+            playwright-report/
+            test-results/
+          retention-days: 14
+
+      - name: Upload regenerated snapshots
+        if: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.update_snapshots == 'true' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: snapshots-${{ matrix.project }}
+          path: test/e2e/**/*-snapshots/**
+          retention-days: 30
