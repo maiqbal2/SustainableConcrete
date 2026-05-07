@@ -10,6 +10,7 @@ from boxcrete.models import (
     fit_slump_gp,
     fit_strength_gp,
     get_strength_gp_input_transform,
+    PartialFixedNoiseLikelihood,
     SustainableConcreteModel,
 )
 from boxcrete.plotting import (
@@ -72,6 +73,7 @@ __all__ = [
     "MORTAR_BOUNDS_DICT",
     "MORTAR_CONSTRAINTS",
     "MORTAR_REFERENCE_POINT",
+    "PartialFixedNoiseLikelihood",
     "SLUMP_DISPLAY_SCALE",
     "SLUMP_Y_COLUMNS",
     "STRENGTH_DISPLAY_SCALE",

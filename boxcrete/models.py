@@ -34,6 +34,7 @@ from boxcrete.utils import (
 from gpytorch.kernels import MaternKernel, RBFKernel, ScaleKernel
 from gpytorch.likelihoods import GaussianLikelihood
 from gpytorch.mlls import ExactMarginalLogLikelihood
+from linear_operator.operators import DiagLinearOperator
 from torch import Tensor
 
 # Indices into DEFAULT_X_COLUMNS (without Time) for derived feature computation
@@ -415,6 +416,68 @@ class SustainableConcreteModel:
         return dict(zip(self.model_names, model_list.models))
 
 
+class PartialFixedNoiseLikelihood(GaussianLikelihood):
+    """Gaussian likelihood that learns noise for real observations while applying
+    fixed near-zero noise to pseudo-observations.
+
+    This enables conditioning the GP to pass through pseudo-observations (e.g.,
+    zero strength at time zero) with high certainty, while still learning the
+    observation noise for real data points via marginal likelihood optimization.
+
+    Args:
+        n_real: Number of real observations (must come first in training data).
+        n_pseudo: Number of pseudo-observations (must come last in training data).
+        pseudo_noise: Fixed noise variance for pseudo-observations.
+        **kwargs: Additional keyword arguments passed to GaussianLikelihood
+            (e.g., noise_constraint).
+    """
+
+    def __init__(
+        self,
+        n_real: int,
+        n_pseudo: int,
+        pseudo_noise: float = 1e-6,
+        **kwargs,
+    ):
+        super().__init__(**kwargs)
+        self._n_real = n_real
+        self._n_pseudo = n_pseudo
+        self._pseudo_noise = pseudo_noise
+
+    @property
+    def n_real(self) -> int:
+        return self._n_real
+
+    @property
+    def n_pseudo(self) -> int:
+        return self._n_pseudo
+
+    @property
+    def pseudo_noise(self) -> float:
+        return self._pseudo_noise
+
+    def _shaped_noise_covar(self, base_shape, *params, **kwargs):
+        n = base_shape[-1]
+        noise = self.noise_covar.noise.squeeze()  # learned scalar noise
+
+        if n == self._n_real + self._n_pseudo:
+            # Training: learned noise for real obs, fixed for pseudo-obs
+            diag = torch.cat(
+                [
+                    noise.expand(self._n_real),
+                    torch.full(
+                        (self._n_pseudo,),
+                        self._pseudo_noise,
+                        device=noise.device,
+                        dtype=noise.dtype,
+                    ),
+                ]
+            )
+            return DiagLinearOperator(diag)
+        # Prediction at test points: use learned noise
+        return super()._shaped_noise_covar(base_shape, *params, **kwargs)
+
+
 def fit_strength_gp(
     X: Tensor,
     Y: Tensor,
@@ -443,6 +506,8 @@ def fit_strength_gp(
 
     # add data to condition GP to be zero at day zero
     X_0, Y_0, Yvar_0 = get_day_zero_data(X=X, bounds=X_bounds, n=128)
+    n_real = X.shape[0]
+    n_pseudo = X_0.shape[0]
     X = torch.cat((X, X_0), dim=0)
     Y = torch.cat((Y, Y_0), dim=0)
     Yvar = torch.cat((Yvar, Yvar_0), dim=0)
@@ -484,8 +549,11 @@ def fit_strength_gp(
     if use_fixed_noise:
         model_kwargs["train_Yvar"] = Yvar
     else:
-        model_kwargs["likelihood"] = GaussianLikelihood(
-            noise_constraint=LogTransformedInterval(1e-6, 1.0, initial_value=1e-1)
+        model_kwargs["likelihood"] = PartialFixedNoiseLikelihood(
+            n_real=n_real,
+            n_pseudo=n_pseudo,
+            pseudo_noise=1e-6,
+            noise_constraint=LogTransformedInterval(1e-6, 1.0, initial_value=1e-1),
         )
     model = SingleTaskGP(**model_kwargs)
     mll = ExactMarginalLogLikelihood(model.likelihood, model)

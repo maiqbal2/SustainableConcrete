@@ -929,31 +929,26 @@ DEFAULT_COST_COEFFICIENTS: dict[str, tuple[float, float]] = {
 # by `fit_gwp_model`.
 # Derived via per-class least-squares regression on training data (which
 # stores -GWP). Magnitudes here are the absolute emission factors.
-DEFAULT_GWP_COEFFICIENTS: dict[int, dict[str, tuple[float, float]]] = {
+DEFAULT_GWP_COEFFICIENTS = {
     0: {  # Material Source 0
-        "Cement (kg/m3)": (0.762613, 0.000384),
-        "Fly Ash (kg/m3)": (0.029577, 0.000457),
-        "Slag (kg/m3)": (0.085921, 0.000326),
-        "Water (kg/m3)": (0.001829, 0.001177),
-        # HRWR GWP: consistent with published EPDs for polycarboxylate-based
-        # superplasticizers (1.5-5.0 kg CO₂/kg range; e.g. BASF MasterGlenium,
-        # Sika ViscoCrete). Tight std confirms deterministic upstream formula.
-        "HRWR (kg/m3)": (3.184316, 0.016840),
-        "Fine Aggregate (kg/m3)": (0.002762, 0.000113),
-        "Coarse Aggregates (kg/m3)": (0.003895, 0.000121),
-        "Temp (C)": (0.002967, 0.005397),
+        "Cement (kg/m3)": (0.762610, 0.000365),
+        "Fly Ash (kg/m3)": (0.029601, 0.000432),
+        "Slag (kg/m3)": (0.085926, 0.000310),
+        "Water (kg/m3)": (-0.001765, 0.001114),
+        "HRWR (kg/m3)": (3.184692, 0.016001),
+        "Fine Aggregate (kg/m3)": (0.002788, 0.000097),
+        "Coarse Aggregates (kg/m3)": (0.003910, 0.000112),
     },
     1: {  # Material Source 1
-        "Cement (kg/m3)": (0.774398, 0.007709),
-        "Fly Ash (kg/m3)": (0.036826, 0.005956),
-        "Slag (kg/m3)": (0.094776, 0.007031),
-        "Water (kg/m3)": (0.001752, 0.020415),
-        # HRWR GWP: consistent with Source 0 (3.18 vs 3.10 kg CO₂/kg).
+        "Cement (kg/m3)": (0.773814, 0.007240),
+        "Fly Ash (kg/m3)": (0.035681, 0.005542),
+        "Slag (kg/m3)": (0.092849, 0.006469),
+        "Water (kg/m3)": (0.003864, 0.019144),
+        # HRWR GWP: consistent with Source 0 (3.18 vs 3.15 kg CO₂/kg).
         # See comment above for EPD references.
-        "HRWR (kg/m3)": (3.102591, 0.531138),
-        "Fine Aggregate (kg/m3)": (0.002823, 0.003714),
-        "Coarse Aggregates (kg/m3)": (0.001063, 0.003163),
-        "Temp (C)": (0.072522, 0.054983),
+        "HRWR (kg/m3)": (3.151231, 0.498391),
+        "Fine Aggregate (kg/m3)": (0.002513, 0.003486),
+        "Coarse Aggregates (kg/m3)": (-0.000039, 0.002870),
     },
 }
 
@@ -1016,31 +1011,40 @@ def make_linear_coefficients(
     return means, variances
 
 
-def get_day_zero_data(X: Tensor, bounds: Tensor | None, n: int = 128):
-    """Computes a tensor of n sobol points that satisfy the bounds, appended with a
-    zeros tensor. Useful to condition the strength GP to be zero at day zero.
+def get_day_zero_data(X: Tensor, bounds: Tensor | None = None, n: int = 128):
+    """Generates pseudo-observations at time=0 for conditioning the GP to predict
+    zero strength at day zero.
+
+    Uses the unique compositions from the training data (without time) to ensure
+    the constraint is enforced at all observed mix designs. If the number of unique
+    compositions exceeds n, a random subset is selected.
 
     Args:
-        X: The input tensor.
-        bounds: The bounds of the input tensor. If None, will be inferred from X.
-        n: The number of sobol points to generate.
+        X: The input tensor (n_train x d), where the last column is time.
+        bounds: Unused, kept for API compatibility. Will be removed in a future version.
+        n: Maximum number of pseudo-observations. If there are fewer unique
+            compositions than n, all unique compositions are used.
 
     Returns:
-        A tensor of n sobol points that satisfy the bounds, appended with a zeros
-        tensor, corresponding to the strength at day zero.
+        A tuple (X_0, Y_0, Yvar_0) of pseudo-observations at time=0.
     """
-    if bounds is None:
-        bounds = torch.stack((X.amin(dim=0), X.amax(dim=0)))
+    # Use unique observed compositions (without time)
+    unique_comps = torch.unique(X[:, :-1], dim=0)
+    n_unique = unique_comps.shape[0]
 
-    d = bounds.shape[-1]
-    sobol_engine = torch.quasirandom.SobolEngine(dimension=(d - 1))  # excluding time
-    X_0 = sobol_engine.draw(n)
-    X_0 = torch.cat((X_0, torch.zeros(n, 1)), dim=-1)  # append time (zero)
-    a, b = bounds[0], bounds[1]
-    X_0 = (b - a) * X_0 + a  # scaling according to bounds
-    X_0[:, -1] = 0.0  # explicitly set time to zero (day zero conditioning)
-    Y_0 = torch.zeros(n, 1)  #  zero strength
-    Yvar_0 = torch.full((n, 1), 1e-4)  #  with large certainty
+    if n_unique <= n:
+        # Use all unique compositions
+        X_comps = unique_comps
+    else:
+        # Random subset of unique compositions
+        perm = torch.randperm(n_unique)[:n]
+        X_comps = unique_comps[perm]
+
+    n_out = X_comps.shape[0]
+    # Append time=0
+    X_0 = torch.cat((X_comps, torch.zeros(n_out, 1, dtype=X.dtype)), dim=-1)
+    Y_0 = torch.zeros(n_out, 1, dtype=X.dtype)
+    Yvar_0 = torch.full((n_out, 1), 1e-4, dtype=X.dtype)
     return X_0, Y_0, Yvar_0
 
 

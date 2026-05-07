@@ -449,10 +449,12 @@ class TestUtilityFunction(unittest.TestCase):
     def test_get_day_zero_data(self, n, bounds):
         X = torch.rand(10, 3)
         X_0, Y_0, Yvar_0 = get_day_zero_data(X, bounds=bounds, n=n)
-        self.assertEqual(X_0.shape[0], n)
+        n_unique = torch.unique(X[:, :-1], dim=0).shape[0]
+        expected_n = min(n, n_unique)
+        self.assertEqual(X_0.shape[0], expected_n)
         # Time column must always be zero (day-zero conditioning)
-        torch.testing.assert_close(X_0[:, -1], torch.zeros(n))
-        torch.testing.assert_close(Y_0, torch.zeros(n, 1))
+        torch.testing.assert_close(X_0[:, -1], torch.zeros(expected_n))
+        torch.testing.assert_close(Y_0, torch.zeros(expected_n, 1))
 
 
 class TestDataLoading(unittest.TestCase):
