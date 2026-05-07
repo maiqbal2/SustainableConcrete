@@ -1,0 +1,1238 @@
+:root, [data-theme="light"] {
+  --bg: #e8edf3;
+  --card-bg-rgb: 255, 255, 255;
+  --border: rgba(255, 255, 255, 0.4);
+  --text: #1a1a1a;
+  --text-secondary: #555;
+  --accent: #2563eb;
+  --band: rgba(37, 99, 235, 0.18);
+  --pareto: #e11d48;
+  --observation: #475569;
+  --point: #475569;
+  --glass-bg: rgba(var(--card-bg-rgb), 0.7);
+  --glass-blur: 4px;
+  --canvas-axis: #1e293b;
+  --canvas-text: #1e293b;
+}
+
+[data-theme="dark"] {
+  --bg: #1a1a2e;
+  --card-bg-rgb: 42, 42, 62;
+  --border: rgba(255, 255, 255, 0.12);
+  --text: #e2e2e2;
+  --text-secondary: #aaa;
+  --accent: #60a5fa;
+  --band: rgba(96, 165, 250, 0.2);
+  --pareto: #fb7185;
+  --observation: #94a3b8;
+  --point: #94a3b8;
+  --glass-bg: rgba(var(--card-bg-rgb), 0.7);
+  --glass-blur: 6px;
+  --canvas-axis: #e2e8f0;
+  --canvas-text: #e2e8f0;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+/* Global theme transition — ensures all color changes are smooth */
+body, .panel, .site-header, .theme-toggle, .unit-toggle,
+.toggle-btn, .controls, .readouts, .filter-row select,
+.filter-row input, .filter-row button, #filter-clear {
+  transition: background-color 0.5s ease, color 0.5s ease, border-color 0.5s ease,
+              backdrop-filter 0.5s ease;
+}
+
+html {
+  background-color: var(--bg);
+  min-height: 100%;
+  /* Prevent horizontal pan on mobile — panels with negative side margins or
+     wide intrinsic content (canvases, sticky header) would otherwise let the
+     viewport scroll left/right, exposing the header endpoints.
+     Use `clip` instead of `hidden` so we don't establish a new scroll
+     container — that would break `position: sticky` on the header in iOS
+     Safari (a long-standing WebKit quirk). */
+  overflow-x: clip;
+  overscroll-behavior-x: none;
+  transition: background-color 0.5s ease;
+}
+[data-theme="dark"] {
+  background-color: #0f0f1a;
+}
+
+/* Fixed background layer — doesn't resize with content */
+.bg-layer {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  background-image: url('Q1000572_opt.jpg');
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+  transition: opacity 0.5s ease;
+}
+[data-theme="dark"] .bg-layer {
+  background-image: url('concrete_poster.jpg');
+}
+
+body {
+  font-family: "DM Sans", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+  font-weight: 400;
+  background: transparent;
+  color: var(--text);
+  line-height: 1.5;
+  padding: 0 1rem 1rem;
+  min-height: 100vh;
+  position: relative;
+  /* Same horizontal lock as <html> — belt-and-braces for iOS Safari which
+     sometimes ignores html overflow when the body is the scroll container.
+     Use `clip` (not `hidden`) so the body doesn't become a scroll container
+     that would break the sticky header. */
+  overflow-x: clip;
+  overscroll-behavior-x: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Frosted glass header */
+.site-header {
+  display: flex;
+  align-items: center;
+  gap: 1.2rem;
+  padding: 0.6rem 1.5rem;
+  margin: 0 -1rem 1rem;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  box-shadow: 0 1px 0 0 var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 50;
+}
+
+.site-header h1 {
+  font-size: 1.3rem;
+  margin: 0;
+  font-family: "DM Sans", "Inter", sans-serif;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  background: linear-gradient(90deg, #3b82f6, #60a5fa, #a78bfa, #60a5fa, #3b82f6);
+  background-size: 200% 100%;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
+  animation: gradientShift 30s linear infinite;
+}
+@keyframes gradientShift {
+  0% { background-position: 200% center; }
+  100% { background-position: 0% center; }
+}
+
+.header-tagline {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+  letter-spacing: -0.01em;
+}
+.header-links {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 2rem;
+  font-size: 0.88rem;
+}
+.header-links a {
+  color: var(--text-secondary);
+  text-decoration: none;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  transition: color 0.15s;
+}
+.header-links a:hover {
+  color: var(--accent);
+}
+.cite-btn {
+  font-size: 0.72rem;
+  padding: 5px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  font-weight: 600;
+  min-width: 3.5rem;
+  text-align: center;
+  transition: background 0.05s, color 0.05s, border-color 0.05s;
+}
+.cite-btn:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+/*
+ * Note: backdrop-filter on nested elements inside already-blurred containers
+ * (header, panels) produces no visible effect — browsers don't compose nested
+ * backdrop-filters. The cite buttons use a simple semi-transparent background
+ * instead.
+ */
+.cite-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.15rem;
+  padding: 0;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(var(--card-bg-rgb), 0.5);
+}
+.header-actions {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 0.8rem;
+}
+.cite-group .cite-btn {
+  border: none;
+  padding: 5px 10px;
+  background: rgba(var(--card-bg-rgb), 0.6);
+  min-width: 4.2rem;
+  border-radius: 999px;
+  line-height: 1;
+  color: var(--text-secondary);
+}
+.cite-group .cite-btn:hover {
+  background: var(--accent);
+  color: #fff;
+}
+.cite-label {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1;
+  color: var(--text-secondary);
+  padding: 5px 10px;
+  min-width: 3.5rem;
+  text-align: center;
+}
+
+/* About modal overlay */
+.about-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.4);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease;
+}
+.about-overlay.visible {
+  opacity: 1;
+  pointer-events: all;
+}
+.about-modal {
+  background: var(--glass-bg);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 2rem 2.2rem;
+  max-width: 560px;
+  max-height: 80vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+  transform: scale(0.95);
+  transition: transform 0.25s ease;
+}
+.about-overlay.visible .about-modal {
+  transform: scale(1);
+}
+.about-close {
+  position: absolute;
+  top: 0.8rem;
+  right: 1rem;
+  background: none;
+  border: none;
+  font-size: 1.5rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  line-height: 1;
+}
+.about-close:hover {
+  color: var(--accent);
+}
+.about-modal h2 {
+  font-size: 1.3rem;
+  margin: 0 0 0.8rem;
+  color: var(--text);
+}
+.about-modal h3 {
+  font-size: 1rem;
+  margin: 1rem 0 0.4rem;
+  color: var(--text);
+  font-weight: 600;
+}
+.about-modal p, .about-modal li {
+  font-size: 0.95rem;
+  line-height: 1.6;
+  color: var(--text-secondary);
+  margin: 0 0 0.5rem;
+}
+.about-modal ul {
+  padding-left: 1.2rem;
+  margin: 0 0 0.5rem;
+}
+.about-modal a {
+  color: var(--accent);
+  text-decoration: none;
+}
+.about-modal a:hover {
+  text-decoration: underline;
+}
+
+/* Mobile about modal */
+@media (max-width: 900px) {
+  .about-modal {
+    max-width: calc(100vw - 2rem);
+    margin: 1rem;
+    padding: 1.5rem;
+    max-height: 85vh;
+  }
+  .about-modal h2 { font-size: 1.15rem; }
+  .about-modal h3 { font-size: 0.92rem; }
+  .about-modal p, .about-modal li { font-size: 0.88rem; }
+}
+
+/* Theme toggle */
+.theme-toggle {
+  background: rgba(var(--card-bg-rgb), 0.6);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  transition: border-color 0.15s, color 0.15s;
+}
+.theme-toggle svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+  margin: auto;
+}
+.theme-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+.unit-toggle {
+  background: rgba(var(--card-bg-rgb), 0.6);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 4px 10px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  font-size: 0.72rem;
+  font-weight: 600;
+  transition: border-color 0.15s, transform 0.1s, background 0.15s, color 0.15s;
+}
+.unit-toggle:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+[data-theme="light"] .icon-moon { display: none; }
+[data-theme="dark"] .icon-sun { display: none; }
+/* Icon shapes are visually off-center in their viewBox; nudge to compensate */
+.icon-moon { transform: translate(0.25px, 0px); }
+.icon-sun { transform: translate(0px, 0.25px); }
+
+/* Panel hint (instruction text) */
+.panel-hint {
+  font-size: 0.78rem;
+  color: var(--text-secondary);
+  margin-bottom: 0.75rem;
+  line-height: 1.4;
+}
+
+h2 {
+  font-family: "DM Sans", "Inter", sans-serif;
+  font-size: 1.05rem;
+  margin-bottom: 0.4rem;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  line-height: 1.15;
+  color: var(--text);
+}
+
+.layout {
+  display: grid;
+  grid-template-columns: 280px 1fr 1fr;
+  align-items: start;
+  gap: 0.75rem;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+/* Each column flows independently — panels size to content */
+.column-flow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+/*
+ * Frosted Glass Panels
+ *
+ * Uses backdrop-filter directly on the panel for the blur effect.
+ *
+ * Known issue: WebKit has a compositing bug where nested scroll containers
+ * or canvas elements inside a backdrop-filter parent can cause a subtle
+ * rendering artifact (visible line) at the border-radius edge. This primarily
+ * affects resized desktop browsers; actual mobile Safari handles it differently.
+ *
+ * Attempted fixes that didn't fully resolve:
+ * - Pseudo-element decoupling (::before with z-index:-1): eliminates artifact
+ *   but backdrop-filter can't see through the parent's stacking context = no blur
+ * - WebKit mask hack (-webkit-mask-image: radial-gradient): didn't fix the seam
+ * - transform:translateZ(0) / will-change / isolation:isolate: no effect
+ *
+ * Current approach: accept the artifact (subtle, device-dependent) and keep
+ * the simplest implementation with full blur support.
+ *
+ * Values: 70% opacity (--glass-bg), light=4px / dark=6px blur (--glass-blur)
+ */
+.panel {
+  position: relative;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border-radius: 12px;
+  padding: 1rem 1.25rem;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08), inset 0 0 0 1px var(--border);
+}
+
+/* Sliders panel */
+.sliders { grid-column: 1; overflow-y: auto; max-height: 80vh; position: relative; }
+.sliders-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.25rem;
+}
+.sliders-header h2 { margin: 0; }
+.slider-group { margin-bottom: 0.75rem; }
+.slider-group label {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.8rem;
+  margin-bottom: 2px;
+}
+.slider-group label span { font-weight: 600; }
+.slider-group input[type=range] {
+  width: 100%;
+  cursor: pointer;
+  accent-color: var(--accent);
+  -webkit-appearance: none;
+  appearance: none;
+  height: 6px;
+  background: var(--border);
+  border-radius: 3px;
+  outline: none;
+}
+.slider-group input[type=range]::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid rgba(255,255,255,0.9);
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.slider-group input[type=range]::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--accent);
+  border: 2px solid rgba(255,255,255,0.9);
+  cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,0,0,0.2);
+}
+.slider-group input[type=range]:hover {
+  opacity: 0.85;
+}
+
+/* Slider preview marker (shown on scatter hover) — hollow circle like a ghost thumb */
+.slider-group {
+  position: relative;
+}
+/* Clickable ingredient names */
+.ingredient-name {
+  cursor: pointer;
+  border-bottom: 1px dashed var(--text-secondary);
+  transition: color 0.15s, border-color 0.15s;
+}
+.ingredient-name:hover {
+  color: var(--accent);
+  border-color: var(--accent);
+}
+.ingredient-name.active {
+  color: var(--accent);
+  border-bottom-style: solid;
+  border-color: var(--accent);
+}
+
+/* Ingredient insight panel */
+.ingredient-insight-panel {
+  padding: 0.75rem 1rem;
+}
+.ingredient-insight-body {
+  position: relative;
+  overflow: hidden;
+  transition: height 0.3s ease;
+}
+.ingredient-insight-title {
+  font-family: "DM Sans", "Inter", sans-serif;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  margin-bottom: 0.4rem;
+  font-weight: 700;
+}
+.ingredient-insight-text {
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.ingredient-insight-text strong {
+  color: var(--accent);
+}
+.ingredient-insight-text.fade-out {
+  opacity: 0;
+  transform: translateY(6px);
+}
+.ingredient-insight-text.fade-in {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+.slider-preview-marker {
+  display: none;
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  border: 2px solid var(--text);
+  background: transparent;
+  border-radius: 50%;
+  pointer-events: none;
+  /* Center the circle: offset by half its own size */
+  transform: translate(-9px, -9px);
+  opacity: 0.8;
+  transition: left 0.15s ease-out;
+  animation: previewPulse 1.5s ease-in-out infinite;
+}
+@keyframes previewPulse {
+  0%, 100% { opacity: 0.8; transform: translate(-9px, -9px) scale(1); }
+  50% { opacity: 0.55; transform: translate(-9px, -9px) scale(1.15); }
+}
+.sliders.previewing {
+  border-color: var(--accent);
+}
+.info-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  padding: 0 2px;
+}
+
+/* Charts */
+.chart-panel { position: relative; }
+.chart-panel canvas {
+  width: 100%;
+  height: 380px;
+  display: block;
+}
+
+/* Extrapolation warning — absolute positioned top-right */
+.extrapolation-warning {
+  position: absolute;
+  top: 1.05rem;
+  right: 1.25rem;
+  font-size: 0.65rem;
+  font-weight: 500;
+  color: #92400e;
+  background: rgba(251, 191, 36, 0.15);
+  border: 1px solid rgba(251, 191, 36, 0.4);
+  border-radius: 999px;
+  padding: 2px 8px;
+  white-space: nowrap;
+  opacity: 0;
+  transition: opacity 0.3s ease;
+  pointer-events: none;
+}
+.extrapolation-warning.visible {
+  opacity: 1;
+}
+[data-theme="dark"] .extrapolation-warning {
+  color: #fbbf24;
+  background: rgba(251, 191, 36, 0.1);
+  border-color: rgba(251, 191, 36, 0.3);
+}
+
+
+/* Readouts */
+.readouts {
+  display: flex;
+  flex-direction: row;
+  justify-content: space-around;
+  gap: 0.5rem;
+  padding: 0.6rem 0 0;
+  font-size: 0.82rem;
+}
+.readouts .value {
+  font-weight: 700;
+  color: var(--accent);
+}
+
+/* Toggle buttons for Material Source */
+.toggle-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 4px;
+}
+.toggle-btn {
+  flex: 1;
+  padding: 4px 8px;
+  font-size: 0.78rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(var(--card-bg-rgb), 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  cursor: pointer;
+  color: var(--text);
+  transition: background 0.15s, border-color 0.15s, transform 0.1s;
+}
+.toggle-btn.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.toggle-btn:hover:not(.active) {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+/* Controls */
+.controls {
+  display: flex;
+  gap: 1rem;
+  align-items: center;
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+}
+.controls select, .controls button {
+  font-size: 0.8rem;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(var(--card-bg-rgb), 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--text);
+  transition: border-color 0.15s;
+}
+.controls select:hover, .controls button:hover {
+  border-color: var(--accent);
+}
+
+/* Tooltip */
+.tooltip {
+  position: fixed;
+  background: rgba(30, 41, 59, 0.85);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: #fff;
+  padding: 6px 10px;
+  border-radius: 6px;
+  font-size: 0.75rem;
+  pointer-events: none;
+  white-space: nowrap;
+  z-index: 100;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+.tooltip::after {
+  content: "";
+  position: absolute;
+  top: 100%;
+  left: 12px;
+  border: 5px solid transparent;
+  border-top-color: rgba(30, 41, 59, 0.85);
+}
+
+/* Filter panel */
+.filter-label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+.filter-row-wrapper {
+  overflow: hidden;
+  margin-bottom: 0.3rem;
+}
+#filter-rows:not(:empty) {
+  margin-top: 0.4rem;
+}
+.filter-row-wrapper.collapsed {
+  display: none;
+}
+.filter-row {
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.78rem;
+  padding: 2px 0;
+  max-width: 100%;
+  overflow: hidden;
+}
+.filter-row select {
+  flex: 1;
+  min-width: 0;
+  max-width: 120px;
+  font-size: 0.72rem;
+  padding: 2px 4px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(var(--card-bg-rgb), 0.5);
+  color: var(--text);
+}
+.filter-row input[type=number] {
+  width: 40px;
+  min-width: 0;
+  flex-shrink: 1;
+  padding: 2px 3px;
+  font-size: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: rgba(var(--card-bg-rgb), 0.5);
+  color: var(--text);
+  transition: border-color 0.15s;
+}
+.filter-row input[type=number]:focus {
+  border-color: var(--accent);
+  outline: none;
+}
+.filter-row button {
+  font-size: 0.75rem;
+  padding: 2px 8px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: rgba(var(--card-bg-rgb), 0.6);
+  color: var(--text);
+  cursor: pointer;
+  transition: transform 0.1s, border-color 0.15s;
+}
+.filter-row button:hover {
+  transform: scale(1.1);
+}
+.filter-actions {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  margin-left: auto;
+  margin-right: 4px;
+}
+#filter-clear {
+  font-size: 0.75rem;
+  padding: 3px 10px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: rgba(var(--card-bg-rgb), 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.15s;
+}
+#filter-clear:hover {
+  border-color: var(--accent);
+}
+.filter-add-btn {
+  color: #16a34a;
+  font-weight: 700;
+  font-size: 0.9rem;
+  border-color: #16a34a;
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  min-height: 22px;
+  border-radius: 50% !important;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  background: rgba(var(--card-bg-rgb), 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  transition: background 0.15s, transform 0.1s;
+}
+.filter-add-btn:hover {
+  background: rgba(22, 163, 74, 0.15);
+  transform: scale(1.1);
+}
+.filter-remove-btn {
+  color: #dc2626;
+  font-weight: 700;
+  font-size: 1rem;
+  border-color: #dc2626;
+  width: 24px;
+  height: 24px;
+  min-width: 24px;
+  min-height: 24px;
+  border-radius: 50% !important;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  margin-left: auto;
+  margin-right: 4px;
+  flex-shrink: 0;
+  transition: background 0.15s, transform 0.1s;
+}
+.filter-remove-btn:hover {
+  background: #fee2e2;
+  transform: scale(1.1);
+}
+
+/* References panel */
+.references-panel {
+  padding: 0.75rem 1rem;
+}
+.references-panel h3 {
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary);
+  margin-bottom: 0.5rem;
+}
+.ref-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+.ref-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+.ref-content {
+  flex: 1;
+  min-width: 0;
+}
+.ref-title {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+  line-height: 1.3;
+}
+.ref-title:hover {
+  text-decoration: underline;
+}
+.ref-authors {
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin: 0.1rem 0;
+}
+.ref-desc {
+  font-size: 0.75rem;
+  color: var(--text);
+  line-height: 1.4;
+  margin: 0.2rem 0 0;
+}
+.ref-desc a {
+  color: var(--accent);
+  text-decoration: underline;
+}
+.ref-content .cite-group {
+  margin-top: 0;
+}
+.ref-actions-row {
+  display: flex;
+  align-items: stretch;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+}
+a.ref-link {
+  text-decoration: none;
+  background: rgba(var(--card-bg-rgb), 0.6);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  padding: 5px 10px;
+  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--text-secondary);
+}
+
+/* Mix insight panel (below scatter plot) */
+.mix-insight-panel {
+  padding: 0.75rem 1rem;
+}
+.mix-insight-body {
+  position: relative;
+  max-height: 150px;
+  overflow-y: auto;
+  transition: height 0.3s ease;
+}
+.mix-insight-title {
+  font-family: "DM Sans", "Inter", sans-serif;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--accent);
+  margin-bottom: 0.4rem;
+  font-weight: 700;
+}
+.mix-insight-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.4rem;
+}
+.mix-insight-header .mix-insight-title {
+  margin-bottom: 0;
+}
+.pareto-pill {
+  margin-left: auto;
+  font-size: 0.6rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  background: var(--pareto);
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 999px;
+  opacity: 0;
+  transform: scale(0.8);
+  transition: opacity 0.25s ease, transform 0.25s ease;
+  pointer-events: none;
+  white-space: nowrap;
+}
+.pareto-pill.visible {
+  opacity: 1;
+  transform: scale(1);
+}
+.mix-insight-text {
+  font-size: 0.82rem;
+  line-height: 1.5;
+  color: var(--text);
+  transition: opacity 0.3s ease, transform 0.3s ease;
+}
+.mix-insight-text strong {
+  color: var(--accent);
+}
+.mix-insight-text strong.pareto-tag {
+  color: var(--pareto);
+}
+.mix-insight-placeholder {
+  color: var(--text-secondary);
+  font-style: italic;
+}
+.mix-insight-text.fade-out {
+  opacity: 0;
+  transform: translateY(6px);
+}
+.mix-insight-text.fade-in {
+  opacity: 0;
+  transform: translateY(-6px);
+}
+
+/* Scatter hint */
+.scatter-hint {
+  font-size: 0.75rem;
+  font-style: italic;
+  color: var(--text-secondary);
+  margin-top: 0.4rem;
+  text-align: center;
+}
+
+/* Clickable axis labels */
+.axis-toggle {
+  display: inline-block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--accent);
+  cursor: pointer;
+  border-bottom: 1.5px dashed var(--accent);
+  padding-bottom: 1px;
+  user-select: none;
+  transition: opacity 0.15s;
+}
+.axis-toggle:hover {
+  opacity: 0.7;
+}
+
+/* Page load animation */
+@keyframes fadeInUp {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.fade-in-up {
+  animation: fadeInUp 0.5s ease both;
+  animation-delay: var(--delay, 0ms);
+}
+
+/* Mobile panel header — toggle buttons inside scatter panel (hidden on desktop) */
+.mobile-panel-header {
+  display: none;
+  gap: 0.4rem;
+  justify-content: center;
+  margin-bottom: 0.5rem;
+}
+.mobile-panel-header button {
+  font-family: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: transparent;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s, border-color 0.15s;
+}
+.mobile-panel-header button.active {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.mobile-panel-header button:hover:not(.active) {
+  border-color: var(--accent);
+}
+.mobile-panel-header .mobile-unit-toggle {
+  display: none;
+}
+
+/* Scatter content wrapper — used for mobile toggle with crossfade */
+.scatter-content {
+  transition: opacity 0.15s ease;
+}
+.scatter-content.fading { opacity: 0; }
+
+/* Mobile-only elements (hidden on desktop) */
+.mobile-hint, .mobile-divider, .mobile-sliders-view {
+  display: none;
+}
+.mobile-sliders-view {
+  transition: opacity 0.15s ease;
+}
+.mobile-sliders-view.fading { opacity: 0; }
+.mobile-scroll-content { display: contents; }
+
+/* Site footer — subtle credit with frosted glass pill */
+.site-footer {
+  text-align: center;
+  padding: 1.5rem 0 0.75rem;
+}
+.site-footer span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.25em;
+  font-size: 0.72rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06), inset 0 0 0 1px var(--border);
+  line-height: 1;
+}
+.site-footer a {
+  color: var(--accent);
+  text-decoration: none;
+  font-weight: 500;
+  transition: opacity 0.15s;
+}
+.site-footer a:hover {
+  opacity: 0.7;
+}
+
+/* Responsive — switch to mobile at 1050px to prevent title/warning overlap in panels */
+@media (max-width: 1050px) {
+  body {
+    padding: 0 0.5rem 1rem;
+    padding-bottom: env(safe-area-inset-bottom, 1rem);
+  }
+
+  .site-header {
+    margin: 0 -0.5rem 0.4rem;
+    padding: 0.4rem 0.8rem;
+    justify-content: space-between;
+    gap: 0.5rem;
+  }
+  /* Flatten wrappers so all 5 visible items become direct flex children of
+     .site-header, allowing justify-content: space-between to space them evenly. */
+  .site-header .header-links,
+  .site-header .header-actions {
+    display: contents;
+  }
+  .site-header h1 { font-size: 1.1rem; }
+  .header-tagline { display: none; }
+  .site-header .cite-group { display: none; }
+  #filter-clear { display: none; }
+
+  .layout {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+  }
+
+  /* On mobile, column-flow wrappers become simple stacking */
+  .column-flow {
+    display: contents;
+  }
+
+  /* Chart panels fill the viewport (each ~half of available space) */
+  .chart-panel {
+    height: calc((100dvh - 46px - 0.4rem) / 2);
+    min-height: 0;
+    display: flex;
+    flex-direction: column;
+    border-radius: 14px;
+    padding: 0.6rem 0.8rem;
+  }
+  .chart-panel canvas {
+    flex: 1;
+    min-height: 0;
+    height: auto !important;
+  }
+
+  /* Reorder: strength curve first, unified scatter/sliders panel second */
+  .chart-panel:has(#curve-canvas) { order: 1; }
+  .chart-panel:has(#scatter-canvas) { order: 2; }
+  .mobile-panel-header { display: flex; align-items: center; }
+  .sliders { display: none !important; } /* hidden on mobile — content moved into unified panel */
+
+  /* Below-the-fold panels */
+  .mix-insight-panel { order: 4; width: 100%; }
+  .ingredient-insight-panel { order: 5; width: 100%; }
+  .references-panel { order: 6; width: 100%; }
+
+  /* Unified panel mobile elements */
+  .mobile-hint {
+    display: block;
+    font-size: 0.72rem;
+    font-style: italic;
+    color: var(--text-secondary);
+    margin: 0.2rem 0 0.3rem;
+    line-height: 1.3;
+  }
+  .mobile-divider {
+    display: block;
+    border: none;
+    border-top: 1px solid var(--border);
+    margin: 0 -0.8rem 0.3rem;
+    opacity: 0.6;
+  }
+  .mobile-scroll-content {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    margin: 0 -0.8rem -0.6rem;
+    padding: 0 0.8rem 0.6rem;
+  }
+  .mobile-scroll-content .scatter-content {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+  }
+  .mobile-scroll-content .scatter-content canvas {
+    min-height: 180px;
+    flex-shrink: 0;
+  }
+  .mobile-sliders-view {
+    display: block;
+  }
+  .mobile-sliders-view.hidden {
+    display: none;
+  }
+
+  /* Header area — no sticky needed, naturally above the scroll container */
+  .chart-panel:has(#scatter-canvas) .mobile-panel-header {
+    margin: -0.6rem -0.8rem 0;
+    padding: 0.6rem 0.8rem 0.3rem;
+  }
+
+  /* Hide scatter panel h2 on mobile — toggle buttons replace it */
+  .scatter-content > h2 { display: none; }
+  .scatter-content.hidden { display: none; }
+  /* Hide scatter hint and panel-hint on mobile — unified hint replaces them */
+  .scatter-hint { display: none; }
+  .panel-hint { display: none; }
+
+  /* Mobile unit toggle pushed to the right */
+  .mobile-unit-toggle { margin-left: auto; }
+  .mobile-panel-header .mobile-unit-toggle { display: flex; }
+
+  .panel { padding: 0.6rem 0.8rem; border-radius: 14px; }
+
+  /* Readouts as compact row on mobile */
+  .readouts {
+    flex-direction: row;
+    flex-wrap: wrap;
+    gap: 0.4rem 0.8rem;
+    font-size: 0.78rem;
+  }
+
+  /* Sliders content inside unified panel */
+  .mobile-sliders-view .slider-group { margin-bottom: 0.4rem; }
+  .mobile-sliders-view .slider-group label { font-size: 0.72rem; }
+
+  h2 { font-size: 0.85rem; }
+}
+
+/* Landscape mobile — panels side by side */
+@media (max-width: 1050px) and (orientation: landscape) {
+  .layout {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+  .chart-panel {
+    height: calc(100dvh - 46px);
+    width: calc(50% - 0.2rem);
+  }
+}

@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+  <!-- Concrete cube with a leaf accent — representing sustainable concrete -->
+  <!-- Cube face (front) -->
+  <path d="M6 12 L16 7 L26 12 L26 24 L16 29 L6 24 Z" fill="#94a3b8" stroke="#475569" stroke-width="1.2"/>
+  <!-- Cube top face -->
+  <path d="M6 12 L16 7 L26 12 L16 17 Z" fill="#cbd5e1" stroke="#475569" stroke-width="1.2"/>
+  <!-- Cube right face -->
+  <path d="M16 17 L26 12 L26 24 L16 29 Z" fill="#64748b" stroke="#475569" stroke-width="1.2"/>
+  <!-- Cube left face -->
+  <path d="M6 12 L16 17 L16 29 L6 24 Z" fill="#94a3b8" stroke="#475569" stroke-width="1.2"/>
+  <!-- Small leaf (sustainability) -->
+  <path d="M20 5 C23 3 26 4 26 4 C26 4 25 7 22 8 C21 8.5 20 8 20 8 L20 10" fill="none" stroke="#16a34a" stroke-width="1.8" stroke-linecap="round"/>
+  <path d="M20 5 C23 3 26 4 26 4 C26 4 25 7 22 8 C21 8.5 20 8 20 8" fill="#22c55e" opacity="0.7"/>
+</svg>

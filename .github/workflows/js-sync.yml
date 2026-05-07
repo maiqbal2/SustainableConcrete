@@ -1,0 +1,40 @@
+# Verifies that the JavaScript GP implementation matches Python reference predictions.
+# Catches drift if model parameters or JS code are changed without re-syncing.
+
+name: JS Model Sync
+
+# Restrict GITHUB_TOKEN to the minimum needed: read-only access to repo
+# contents (required by actions/checkout). The workflow never writes to the
+# repo, comments on PRs, deploys, or interacts with any other GitHub APIs.
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - 'docs/gp.mjs'
+      - 'docs/model/**'
+      - 'test/test_js_gp.mjs'
+  pull_request:
+    branches: [main, master]
+    paths:
+      - 'docs/gp.mjs'
+      - 'docs/model/**'
+      - 'test/test_js_gp.mjs'
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
+jobs:
+  js-model-sync:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Run JS GP sync test
+        run: node test/test_js_gp.mjs
