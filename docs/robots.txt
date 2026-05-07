@@ -1,0 +1,7 @@
+# BOxCrete interactive explorer — crawler hints.
+# All assets under docs/ are public; no auth or rate-limited surfaces here.
+# Sitemap path is informational: GitHub Pages doesn't auto-discover robots.txt
+# at project subpaths, so this file is mainly for Lighthouse and direct fetches.
+User-agent: *
+Allow: /
+Sitemap: https://facebookresearch.github.io/SustainableConcrete/sitemap.xml

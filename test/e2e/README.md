@@ -26,6 +26,42 @@ property on a PR, add a spec for it before merging.
 | `about-modal.spec.ts`         | About modal opens on link click and closes on `Escape`                    | desktop+mobile |
 | `about-modal.spec.ts`         | About modal closes on overlay click and on the × button                   | desktop+mobile |
 | `sliders.spec.ts`             | At least one slider is rendered with min/max labels                       | desktop |
+| `sliders.spec.ts`             | Slider input redraws the strength curve canvas                            | desktop |
+| `sliders.spec.ts`             | Click-to-edit: typing a value + Enter commits to slider and curve         | desktop |
+| `sliders.spec.ts`             | Click-to-edit: Escape reverts an in-progress edit (slider unchanged)      | desktop |
+| `sliders.spec.ts`             | Click-to-edit: out-of-range typed value is clamped to slider [min, max]   | desktop |
+| `sliders.spec.ts`             | Click-to-edit: non-numeric input reverts on Enter                         | desktop |
+| `sliders.spec.ts`             | Click-to-edit: blur commits the edit (same as Enter)                      | desktop |
+| `sliders.spec.ts`             | Material Source value display is NOT an editable input                    | desktop |
+| `sliders.spec.ts`             | Unit toggle while focused on a value input commits the edit               | desktop |
+| `preview-curve.spec.ts`       | `displayPreviewComp` matches `currentComposition` after Material Source toggle | desktop |
+| `preview-curve.spec.ts`       | Mix Insight description is refreshed (not stale) after Material Source toggle | desktop |
+| `preview-curve.spec.ts`       | Strength curve transition state is active right after MS toggle and clears after ~350 ms | desktop |
+| `font-uniformity.spec.ts`     | `.mix-insight-text`, `.ingredient-insight-text`, `.ref-desc` share computed font size | desktop+mobile |
+| `og-meta.spec.ts`             | Required Open Graph + Twitter Card meta tags present with expected content | desktop |
+| `og-meta.spec.ts`             | `og-image.jpg` is reachable, JPEG, and within 50–250 KB budget            | desktop |
+| `readouts-strip.spec.ts`      | Desktop: GWP, Cost, and W/B readouts are all visible                      | desktop |
+| `readouts-strip.spec.ts`      | Mobile: W/B is hidden and remaining readouts stay on one line             | mobile |
+| `seo.spec.ts`                 | `<meta name="description">`, canonical link, and JSON-LD WebApplication present | desktop |
+| `seo.spec.ts`                 | `/robots.txt` and `/sitemap.xml` reachable and well-formed                | desktop |
+| `mobile-slider-layout.spec.ts`| Label, slider, and info-row stack vertically without overlap              | mobile |
+| `mobile-slider-layout.spec.ts`| Ingredient names are left-aligned (consistent left edge across rows)      | mobile |
+| `mobile-slider-layout.spec.ts`| Ingredient name and info-row min share the same left edge                 | mobile |
+| `mobile-slider-layout.spec.ts`| Ingredient name and value input share a vertical centerline (±2 px)       | mobile |
+| `mobile-slider-layout.spec.ts`| Ingredient name shows a dashed underline as click affordance (no border)  | mobile |
+| `mobile-slider-layout.spec.ts`| Mobile font hierarchy: label fontSize ≥ info-row fontSize                 | mobile |
+| `mobile-slider-layout.spec.ts`| All slider tracks have uniform width and aligned left/right edges         | mobile |
+| `mobile-slider-layout.spec.ts`| Slider is centered in the panel and narrower than full panel width        | mobile |
+| `mobile-slider-layout.spec.ts`| Value input offsetHeight ≥ 32 px (tap target)                             | mobile |
+| `mobile-slider-layout.spec.ts`| Material Source: toggle row visible, redundant value-span hidden          | mobile |
+| `mobile-slider-layout.spec.ts`| Value input glyph-end aligns with info-row max bound (right-edge)         | mobile |
+| `mobile-slider-layout.spec.ts`| Slider preview marker lands on the visible track when scatter is hovered  | mobile |
+| `scatter-filter.spec.ts`      | Filter min/max placeholders fit fully inside the input box (no spinner clip) | desktop |
+| `mobile-value-fit.spec.ts`    | Metric values fit (no panel overflow) at first paint                      | mobile |
+| `mobile-value-fit.spec.ts`    | Fractional metric values (.3) fit                                         | mobile |
+| `mobile-value-fit.spec.ts`    | Imperial values fit (worst-case mass conversion)                          | mobile |
+| `mobile-value-fit.spec.ts`    | Imperial max-bound values fit                                             | mobile |
+| `mobile-value-fit.spec.ts`    | Narrow viewport (320 px): values fit at all unit/value combinations       | mobile |
 | `visual-regression.spec.ts`   | Full-page screenshot matches committed baseline (skipped by default)      | desktop+mobile |
 
 ## Running
