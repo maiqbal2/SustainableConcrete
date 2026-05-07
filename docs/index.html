@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>BOxCrete – Interactive Concrete Strength Explorer</title>
+  <meta name="theme-color" content="#e8edf3">
+  <link rel="icon" type="image/svg+xml" href="favicon.svg">
+  <link rel="stylesheet" href="style.css">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script>
+    // Apply theme before render to avoid flash
+    function getEffectiveTheme() {
+      return localStorage.getItem('boxcrete-theme') ||
+        (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+    }
+    function applyTheme() {
+      const theme = getEffectiveTheme();
+      document.documentElement.setAttribute('data-theme', theme);
+      document.querySelector('meta[name="theme-color"]').content =
+        theme === 'dark' ? '#1a1a2e' : '#e8edf3';
+    }
+    applyTheme();
+    // Background fade-in on first load (double-rAF ensures it fires after first paint)
+    requestAnimationFrame(() => requestAnimationFrame(() => document.documentElement.classList.add('loaded')));
+  </script>
+</head>
+<body>
+  <!-- Fixed background (real element — iOS handles better than pseudo-elements) -->
+  <div class="bg-layer" id="bg-layer"></div>
+
+  <!-- Frosted glass header -->
+  <header class="site-header">
+    <h1>BOxCrete</h1>
+    <span class="header-tagline">Interactive Concrete Strength Explorer</span>
+    <nav class="header-links">
+      <a href="#" id="about-link">About</a>
+      <a href="https://www.youtube.com/watch?v=PHuAG_jZMD8" target="_blank" rel="noopener">Video</a>
+      <a href="https://github.com/facebookresearch/SustainableConcrete" target="_blank" rel="noopener">GitHub</a>
+    </nav>
+    <div class="header-actions">
+      <div class="cite-group">
+        <span class="cite-label">Cite</span>
+        <button class="cite-btn" id="cite-bibtex" data-format="bibtex">BibTeX</button>
+        <button class="cite-btn" id="cite-apa" data-format="apa">APA</button>
+      </div>
+      <button class="theme-toggle" id="theme-toggle" aria-label="Toggle dark/light theme">
+        <svg class="icon-sun" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="5"/><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/>
+        </svg>
+        <svg class="icon-moon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/>
+        </svg>
+      </button>
+    </div>
+  </header>
+
+  <!-- About Modal Overlay -->
+  <div class="about-overlay" id="about-overlay">
+    <div class="about-modal">
+      <button class="about-close" id="about-close" aria-label="Close">&times;</button>
+      <h2>About This Explorer</h2>
+      <p>This tool predicts concrete compressive strength using a Gaussian Process model trained on laboratory mortar and concrete specimens. Predictions reflect controlled lab conditions and <strong>may differ from field performance</strong> due to batching variability, curing environment, and aggregate properties.</p>
+      <h3>How to Use</h3>
+      <ul>
+        <li><strong>Composition sliders</strong> — adjust mix proportions to see predicted strength and cost/GWP tradeoffs in real time.</li>
+        <li><strong>Scatter plot</strong> — shows all training compositions; click a point to load its mix. Pareto-optimal mixes (best tradeoff) are highlighted.</li>
+        <li><strong>Strength curve</strong> — predicted strength over 28 days with uncertainty band. Observed data points appear when viewing a training mix.</li>
+        <li><strong>Insight panels</strong> — click an ingredient name for material science context, or click a data point for a mix-specific analysis.</li>
+      </ul>
+      <h3>Uncertainty</h3>
+      <p>Shaded bands represent ±2σ model uncertainty. Wider bands indicate regions with less training data — predictions there are less reliable.</p>
+      <h3>Papers</h3>
+      <p><a href="https://arxiv.org/abs/2603.21525" target="_blank" rel="noopener">Baten, Iqbal, Ament, Kusuma, &amp; Garg (2026)</a> — BOxCrete: A Bayesian Optimization Open-Source AI Model for Concrete Strength Forecasting and Mix Optimization.<br>
+      <a href="https://arxiv.org/abs/2310.18288" target="_blank" rel="noopener">Ament, Witte, Garg, &amp; Kusuma (2023)</a> — Sustainable Concrete via Bayesian Optimization.</p>
+    </div>
+  </div>
+
+  <main class="layout">
+    <!-- Sliders Panel -->
+    <div class="panel sliders fade-in-up" id="sliders-panel" style="--delay: 0ms">
+      <div class="sliders-header">
+        <h2 id="sliders-title">Composition (kg/m³)</h2>
+        <button class="unit-toggle" id="unit-toggle" aria-label="Toggle metric/imperial units">
+          <span class="unit-label" id="unit-label">SI</span>
+        </button>
+      </div>
+      <p class="panel-hint">Adjust sliders or click a point in the scatter plot to explore predicted strength curves with uncertainty.</p>
+      <div id="sliders"></div>
+    </div>
+
+    <!-- Column 2: Scatter + Mix Insight -->
+    <div class="column-flow">
+      <!-- Scatter Plot (becomes unified panel on mobile) -->
+      <div class="panel chart-panel fade-in-up" style="--delay: 100ms">
+        <div class="mobile-panel-header">
+          <button id="mobile-show-scatter" class="active">Performance Tradeoffs</button>
+          <button id="mobile-show-sliders">Composition (kg/m³)</button>
+          <button class="unit-toggle mobile-unit-toggle" id="mobile-unit-toggle" aria-label="Toggle metric/imperial units">
+            <span class="unit-label" id="mobile-unit-label">SI</span>
+          </button>
+        </div>
+        <p class="mobile-hint" id="mobile-hint">Tap a point to explore its properties. Tap X/Y toggles to switch axes.</p>
+        <hr class="mobile-divider">
+        <div class="mobile-scroll-content">
+        <div class="scatter-content">
+        <h2>Performance Tradeoffs</h2>
+        <canvas id="scatter-canvas" aria-label="Scatter plot showing performance tradeoffs between concrete mixes"></canvas>
+        <p class="scatter-hint">Click a point to explore its properties. Click X/Y toggles to switch axes.</p>
+        <div class="controls" id="scatter-controls">
+          <span>X: <span class="axis-toggle" id="toggle-x">GWP</span></span>
+          <span>Y: <span class="axis-toggle" id="toggle-day">28-day strength</span></span>
+          <span class="filter-actions">
+            <span class="filter-label">Filter</span>
+            <button id="filter-add" class="filter-add-btn" title="Add filter">+</button>
+            <button id="filter-clear">Clear all</button>
+          </span>
+        </div>
+        <div id="filter-rows"></div>
+        </div>
+        <div class="mobile-sliders-view hidden"></div>
+        </div>
+      </div>
+
+      <!-- Mix Insight (below scatter) -->
+      <div class="panel mix-insight-panel fade-in-up" id="mix-insight" style="--delay: 300ms">
+        <div class="mix-insight-header">
+          <h3 class="mix-insight-title">Mix Insight</h3>
+          <span class="pareto-pill" id="pareto-pill">Pareto-optimal</span>
+        </div>
+        <div class="mix-insight-body">
+          <p class="mix-insight-text" id="mix-insight-text"><span class="mix-insight-placeholder">Click a data point to see mix analysis.</span></p>
+        </div>
+      </div>
+
+      <!-- Ingredient Insights (below mix insight) -->
+      <div class="panel ingredient-insight-panel fade-in-up" id="ingredient-insight" style="--delay: 350ms">
+        <h3 class="ingredient-insight-title">Ingredient Insight</h3>
+        <div class="ingredient-insight-body">
+          <p class="ingredient-insight-text" id="ingredient-insight-text"><span class="mix-insight-placeholder">Click an ingredient name in the Composition panel to learn more.</span></p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Column 3: Strength Curve + References -->
+    <div class="column-flow">
+      <!-- Strength Curve -->
+      <div class="panel chart-panel fade-in-up" style="--delay: 200ms">
+        <span class="extrapolation-warning" id="extrapolation-warning">⚠ Far from data</span>
+        <h2>Predicted Strength Curve</h2>
+        <canvas id="curve-canvas" aria-label="Predicted concrete strength curve over curing time"></canvas>
+        <div class="readouts" id="readouts">
+          <div>GWP: <span class="value" id="gwp-value">–</span> <span class="unit" id="gwp-unit">kg CO₂/m³</span></div>
+          <div>Cost: <span class="value" id="cost-value">–</span> <span id="cost-uncertainty"></span> <span class="unit" id="cost-unit">$/m³</span></div>
+          <div>W/B: <span class="value" id="wb-value">–</span></div>
+          <!-- TODO: Add Slump readout once model/slump.json is available. -->
+        </div>
+      </div>
+
+      <!-- References -->
+      <div class="panel references-panel fade-in-up" style="--delay: 250ms">
+        <h3>References</h3>
+        <div class="ref-list">
+          <div class="ref-item">
+            <div class="ref-content">
+              <a class="ref-title" href="https://arxiv.org/abs/2603.21525" target="_blank" rel="noopener">BOxCrete: A Bayesian Optimization Open-Source AI Model for Concrete Strength Forecasting and Mix Optimization</a>
+              <p class="ref-authors">Baten, Iqbal, Ament, Kusuma, Garg (2026)</p>
+              <p class="ref-desc">Extends the framework to comprehensive concrete mix analysis across different curing temperatures and material sources. The resulting model was used to design a low-carbon mix deployed at <a href="https://engineering.fb.com/2026/03/30/data-center-engineering/ai-for-american-produced-cement-and-concrete/" target="_blank" rel="noopener">a Meta data center</a>.</p>
+              <div class="ref-actions-row">
+                <a class="cite-btn ref-link" href="https://arxiv.org/abs/2603.21525" target="_blank" rel="noopener">arXiv</a>
+                <div class="cite-group">
+                  <span class="cite-label">Cite</span>
+                  <button class="cite-btn ref-cite" data-paper="boxcrete" data-format="bibtex">BibTeX</button>
+                  <button class="cite-btn ref-cite" data-paper="boxcrete" data-format="apa">APA</button>
+                </div>
+              </div>
+            </div>
+          </div>
+          <div class="ref-item">
+            <div class="ref-content">
+              <a class="ref-title" href="https://arxiv.org/abs/2310.18288" target="_blank" rel="noopener">Sustainable Concrete via Bayesian Optimization</a>
+              <p class="ref-authors">Ament, Witte, Garg, Kusuma (2023)</p>
+              <p class="ref-desc">Introduces the custom Gaussian process model and multi-objective Bayesian optimization formulation for concrete mix design, with initial results demonstrating efficient discovery of low-carbon, high-strength mortar formulations.</p>
+              <div class="ref-actions-row">
+                <a class="cite-btn ref-link" href="https://arxiv.org/abs/2310.18288" target="_blank" rel="noopener">arXiv</a>
+                <div class="cite-group">
+                  <span class="cite-label">Cite</span>
+                  <button class="cite-btn ref-cite" data-paper="sustainable" data-format="bibtex">BibTeX</button>
+                  <button class="cite-btn ref-cite" data-paper="sustainable" data-format="apa">APA</button>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <footer class="site-footer">
+    <span>Explorer designed by <a href="https://sebastianament.github.io" target="_blank" rel="noopener">Sebastian Ament</a></span>
+  </footer>
+
+  <script type="module" src="ui.mjs"></script>
+  <script>
+    // Theme toggle
+    document.getElementById('theme-toggle').addEventListener('click', () => {
+      const current = getEffectiveTheme();
+      localStorage.setItem('boxcrete-theme', current === 'light' ? 'dark' : 'light');
+      applyTheme();
+    });
+    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
+      localStorage.removeItem('boxcrete-theme');
+      applyTheme();
+    });
+    // Unit toggle (dispatches custom event for ui.mjs to listen to)
+    document.getElementById('unit-toggle').addEventListener('click', () => {
+      document.dispatchEvent(new CustomEvent('toggle-units'));
+    });
+    document.getElementById('mobile-unit-toggle').addEventListener('click', () => {
+      document.dispatchEvent(new CustomEvent('toggle-units'));
+    });
+    // Mobile panel toggle (scatter vs sliders — unified panel)
+    const mobileScatterBtn = document.getElementById('mobile-show-scatter');
+    const mobileSlidersBtn = document.getElementById('mobile-show-sliders');
+    const scatterContent = document.querySelector('.scatter-content');
+    const mobileSlidersView = document.querySelector('.mobile-sliders-view');
+    const slidersPanel = document.getElementById('sliders-panel');
+    const mobileHint = document.getElementById('mobile-hint');
+
+    // On mobile, move sliders content into the unified panel
+    function initMobileSliders() {
+      if (mobileSlidersView.children.length === 0 && window.innerWidth <= 1050) {
+        const hint = slidersPanel.querySelector('.panel-hint');
+        const sliders = document.getElementById('sliders');
+        if (hint) mobileSlidersView.appendChild(hint);
+        if (sliders) mobileSlidersView.appendChild(sliders);
+      }
+    }
+    // Restore sliders to their panel for desktop
+    function restoreDesktopSliders() {
+      if (window.innerWidth > 1050 && mobileSlidersView.children.length > 0) {
+        const hint = mobileSlidersView.querySelector('.panel-hint');
+        const sliders = document.getElementById('sliders');
+        const header = slidersPanel.querySelector('.sliders-header');
+        if (hint && header) header.after(hint);
+        if (sliders) slidersPanel.appendChild(sliders);
+        // Reset toggle state for desktop
+        scatterContent.classList.remove('hidden');
+        mobileSlidersView.classList.add('hidden');
+        mobileScatterBtn.classList.add('active');
+        mobileSlidersBtn.classList.remove('active');
+        mobileHint.textContent = 'Tap a point to explore its properties. Tap X/Y toggles to switch axes.';
+        // Redraw scatter with correct dimensions
+        document.dispatchEvent(new CustomEvent('invalidate-scatter'));
+      }
+    }
+    initMobileSliders();
+    window.addEventListener('resize', () => {
+      initMobileSliders();
+      restoreDesktopSliders();
+    });
+
+    // Crossfade helper: fade out current, swap, fade in new
+    function crossfade(fadeOut, fadeIn, onSwap) {
+      fadeOut.classList.add('fading');
+      setTimeout(() => {
+        fadeOut.classList.add('hidden');
+        fadeOut.classList.remove('fading');
+        onSwap();
+        fadeIn.classList.remove('hidden');
+        fadeIn.classList.add('fading');
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => fadeIn.classList.remove('fading'));
+        });
+      }, 150);
+    }
+
+    mobileScatterBtn.addEventListener('click', () => {
+      if (scatterContent.classList.contains('hidden')) {
+        mobileScatterBtn.classList.add('active');
+        mobileSlidersBtn.classList.remove('active');
+        crossfade(mobileSlidersView, scatterContent, () => {
+          mobileHint.textContent = 'Tap a point to explore its properties. Tap X/Y toggles to switch axes.';
+          document.dispatchEvent(new CustomEvent('invalidate-scatter'));
+        });
+      }
+    });
+    mobileSlidersBtn.addEventListener('click', () => {
+      if (mobileSlidersView.classList.contains('hidden')) {
+        mobileSlidersBtn.classList.add('active');
+        mobileScatterBtn.classList.remove('active');
+        crossfade(scatterContent, mobileSlidersView, () => {
+          mobileHint.textContent = 'Adjust sliders to explore predicted strength curves with uncertainty.';
+        });
+      }
+    });
+    // Citation data (shared by header and reference buttons)
+    const citations = {
+      boxcrete: {
+        bibtex: `@misc{baten2026boxcrete,
+  title={BOxCrete: A Bayesian Optimization Open-Source AI Model for Concrete Strength Forecasting and Mix Optimization},
+  author={Bayezid Baten and M. Ayyan Iqbal and Sebastian Ament and Julius Kusuma and Nishant Garg},
+  year={2026},
+  eprint={2603.21525},
+  archivePrefix={arXiv},
+  primaryClass={cs.LG},
+  url={https://arxiv.org/abs/2603.21525},
+}`,
+        apa: `Baten, B., Iqbal, M. A., Ament, S., Kusuma, J., & Garg, N. (2026). BOxCrete: A Bayesian Optimization Open-Source AI Model for Concrete Strength Forecasting and Mix Optimization. arXiv preprint arXiv:2603.21525.`,
+      },
+      sustainable: {
+        bibtex: `@misc{ament2023sustainable,
+  title={Sustainable Concrete via Bayesian Optimization},
+  author={Sebastian Ament and Andrew Witte and Nishant Garg and Julius Kusuma},
+  year={2023},
+  eprint={2310.18288},
+  archivePrefix={arXiv},
+  primaryClass={cs.LG},
+  url={https://arxiv.org/abs/2310.18288},
+}`,
+        apa: `Ament, S., Witte, A., Garg, N., & Kusuma, J. (2023). Sustainable Concrete via Bayesian Optimization. arXiv preprint arXiv:2310.18288.`,
+      },
+    };
+    // All citations combined (for header buttons)
+    const allBibtex = citations.boxcrete.bibtex + '\n' + citations.sustainable.bibtex;
+    const allApa = citations.boxcrete.apa + '\n\n' + citations.sustainable.apa;
+
+    // Header cite buttons (copy both papers)
+    function setupCiteBtn(id, text) {
+      const btn = document.getElementById(id);
+      const label = btn.textContent;
+      btn.addEventListener('click', () => {
+        navigator.clipboard.writeText(text).then(() => {
+          btn.textContent = 'Copied!';
+          setTimeout(() => { btn.textContent = label; }, 2000);
+        });
+      });
+    }
+    setupCiteBtn('cite-bibtex', allBibtex);
+    setupCiteBtn('cite-apa', allApa);
+
+    // Individual reference cite buttons
+    for (const btn of document.querySelectorAll('.ref-cite')) {
+      const label = btn.textContent;
+      btn.addEventListener('click', () => {
+        const key = btn.dataset.paper;
+        const format = btn.dataset.format;
+        navigator.clipboard.writeText(citations[key][format]).then(() => {
+          btn.textContent = 'Copied!';
+          setTimeout(() => { btn.textContent = label; }, 2000);
+        });
+      });
+    }
+
+    // About modal
+    const aboutOverlay = document.getElementById('about-overlay');
+    document.getElementById('about-link').addEventListener('click', (e) => {
+      e.preventDefault();
+      aboutOverlay.classList.add('visible');
+    });
+    document.getElementById('about-close').addEventListener('click', () => {
+      aboutOverlay.classList.remove('visible');
+    });
+    aboutOverlay.addEventListener('click', (e) => {
+      if (e.target === aboutOverlay) aboutOverlay.classList.remove('visible');
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') aboutOverlay.classList.remove('visible');
+    });
+  </script>
+</body>
+</html>
