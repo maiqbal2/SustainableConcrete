@@ -11,6 +11,26 @@ function easeInOutCubic(t) {
   return t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 }
 
+// Generate `nPts` log-spaced curing times in [0, 28] days. Denser at early
+// times where strength changes fastest — inverse of `log10(t+1)/log10(29)`.
+// Used by `drawStrengthCurve` (32 pts interactive / 64 pts idle), the
+// Material Source curve transition (64 pts), and the always-on preview
+// curve (PREVIEW_PTS pts).
+function logSpacedTimes(nPts) {
+  return Array.from({ length: nPts }, (_, i) => {
+    const t01 = i / (nPts - 1);
+    return Math.pow(29, t01) - 1;
+  });
+}
+
+// Convert GP variances to standard deviations including model noise.
+// `variances` is the array returned by `predictStrengthCurve`; we add the
+// noise variance (in the GP's normalised target space) before sqrt.
+function computeStds(variances, params) {
+  const noiseVar = params.noise_variance * params.y_std * params.y_std;
+  return variances.map((v) => Math.sqrt(v + noiseVar));
+}
+
 // --- Cached DOM Elements & Indices ---
 let _sliderInputs = null; // cached after buildSliders()
 let COL_MS = -1; // "Material Source" column index
@@ -26,6 +46,11 @@ let scatterDay = 28;
 let scatterXAxis = "gwp"; // "gwp" or "cost"
 let curveObsPositions = []; // [{px, py, time, strength}] for tooltip hit-testing
 let animationId = null; // for smooth transitions
+// Most recent animation TARGET (intended end state). When the user commits a
+// click-to-edit value during an in-flight animation, we build the new target
+// from this — not from mid-lerp `currentComposition` — so other still-animating
+// sliders land at their intended positions.
+let _lastAnimTarget = null;
 let scatterFilter = null; // [{colIdx, min, max}] array or null
 let mixAnalyses = null; // pre-computed mix descriptions
 let animLoopId = null; // unified animation loop frame ID
@@ -33,6 +58,13 @@ let lastFrameTime = 0; // for frame-rate-independent interpolation
 let scatterTransition = null; // {startTime, duration, fromX, fromY, toX, toY, fromPareto, toPareto}
 let _curveYMax = null; // smoothly interpolated y-axis max for strength curve
 let _curveYMaxTarget = null; // target y-max (for animation loop convergence check)
+// Material Source curve transition: when the user toggles Material Source, we
+// snapshot the pre-toggle strength curve and blend it linearly with the
+// post-toggle curve over `duration` ms. Because Material Source is binary,
+// composition-level interpolation would feed the GP non-categorical values
+// and yield a noisy intermediate prediction. Curve-level interpolation keeps
+// the visual aesthetic smooth without violating the GP's input domain.
+let _msCurveTransition = null; // {startTime, duration, times, fromMeans, fromStds}
 
 // --- Unit System ---
 let unitSystem = "metric"; // "metric" or "imperial"
@@ -77,6 +109,14 @@ function getDisplayFactors() {
 
 // Listen for unit toggle
 document.addEventListener("toggle-units", () => {
+  // Blur any in-progress click-to-edit before the unit transition. Otherwise,
+  // a number typed in (e.g.) kg/m³ would be interpreted in lb/yd³ on commit.
+  // Blur fires the input's blur listener, which commits the edit in the
+  // pre-toggle unit context.
+  const active = document.activeElement;
+  if (active && active.classList && active.classList.contains("slider-value")) {
+    active.blur();
+  }
   const oldFactors = { ...U() };
   unitSystem = unitSystem === "metric" ? "imperial" : "metric";
   const newFactors = { ...U() };
@@ -141,7 +181,7 @@ const ingredientInfo = {
   "Fine Aggregate": "Sand — provides bulk volume, dimensional stability, and load transfer in the morite matrix. Particle size distribution (gradation) affects packing density and paste demand. Typically river sand or manufactured sand from crushed rock.",
   "Coarse Aggregates": "Gravel or crushed stone (>4.75 mm) — forms the structural skeleton of concrete. The interfacial transition zone (ITZ) between paste and aggregate is often the weakest link. Well-graded aggregates improve packing and reduce paste demand. Typically 60–75% of concrete by volume.",
   "Material Source": "Identifies the source of raw materials. Different sources have varying mineral compositions, particle size distributions, and reactivity — all of which affect strength development, workability, and durability. Source-specific models account for this variability.",
-  "Temp": "Curing temperature significantly affects hydration kinetics. Higher temperatures accelerate early hydration (faster early strength) but can reduce ultimate strength due to non-uniform hydrate distribution. Low temperatures slow hydration but can improve long-term microstructure. The Arrhenius-based maturity concept links time and temperature to strength development.",
+  "Temperature": "Curing temperature significantly affects hydration kinetics. Higher temperatures accelerate early hydration (faster early strength) but can reduce ultimate strength due to non-uniform hydrate distribution. Low temperatures slow hydration but can improve long-term microstructure. The Arrhenius-based maturity concept links time and temperature to strength development.",
 };
 
 function buildSliders() {
@@ -166,7 +206,10 @@ function buildSliders() {
     // Material Source gets a toggle instead of a slider
     if (col === "Material Source") {
       const group = document.createElement("div");
-      group.className = "slider-group";
+      // `material-source-group` lets mobile CSS hide the redundant value-span
+      // and span the toggle-row across cols 2–3 without a `:has()` selector
+      // (Safari < 15.4 still hits this page).
+      group.className = "slider-group material-source-group";
 
       const label = document.createElement("label");
       const nameSpan = document.createElement("span");
@@ -187,21 +230,31 @@ function buildSliders() {
       btn0.textContent = "Source A";
       btn0.className = currentComposition[i] === 0 ? "toggle-btn active" : "toggle-btn";
       btn0.addEventListener("click", () => {
-        currentComposition[i] = 0;
+        // Smooth curve-level transition (see `triggerMaterialSourceTransition`).
+        // Updates `currentComposition[i]` and `displayPreviewComp[i]` internally.
+        triggerMaterialSourceTransition(i, 0);
         btn0.className = "toggle-btn active";
         btn1.className = "toggle-btn";
         document.getElementById(`val-${i}`).textContent = "Source A";
         update();
+        // Refresh mix insight: the new composition (median + other MS) is
+        // typically NOT in the training set, so the previous mix's description
+        // would otherwise persist stale. Schedule with the same delay used by
+        // `animateToComposition` so the insight settles after the curve does.
+        scheduleInsightUpdate();
+        checkExtrapolationWarning();
       });
       const btn1 = document.createElement("button");
       btn1.textContent = "Source B";
       btn1.className = currentComposition[i] === 1 ? "toggle-btn active" : "toggle-btn";
       btn1.addEventListener("click", () => {
-        currentComposition[i] = 1;
+        triggerMaterialSourceTransition(i, 1);
         btn0.className = "toggle-btn";
         btn1.className = "toggle-btn active";
         document.getElementById(`val-${i}`).textContent = "Source B";
         update();
+        scheduleInsightUpdate();
+        checkExtrapolationWarning();
       });
       toggle.append(btn0, btn1);
 
@@ -218,10 +271,14 @@ function buildSliders() {
 
     const label = document.createElement("label");
     const nameSpan = document.createElement("span");
-    const shortName = col.replace(" (kg/m3)", "").replace(" (C)", "");
+    // Display name: strip unit suffix and rename "Temp" → "Temperature" for
+    // a friendlier label. The underlying column name in `compositionsData`
+    // is unchanged (still "Temp (C)") so model code keeps working.
+    let shortName = col.replace(" (kg/m3)", "").replace(" (C)", "");
+    if (shortName === "Temp") shortName = "Temperature";
     nameSpan.textContent = shortName;
     // Make ingredient names clickable for info
-    const infoKey = shortName === "Temp" ? "Temp" : shortName;
+    const infoKey = shortName;
     if (ingredientInfo[infoKey]) {
       nameSpan.className = "ingredient-name";
       nameSpan.addEventListener("click", (e) => {
@@ -229,10 +286,19 @@ function buildSliders() {
         toggleIngredientInfo(group, infoKey);
       });
     }
-    const valueSpan = document.createElement("span");
-    valueSpan.id = `val-${i}`;
-    valueSpan.textContent = (currentComposition[i] * sliderDisplayFactor(col)).toFixed(1);
-    label.append(nameSpan, valueSpan);
+    const valueInput = document.createElement("input");
+    valueInput.id = `val-${i}`;
+    valueInput.className = "slider-value";
+    valueInput.type = "text";
+    // `decimal` is safe here: all composition columns have b.min >= 0, so no
+    // negative values are ever entered (no need for `-` key on iOS Safari).
+    valueInput.inputMode = "decimal";
+    valueInput.setAttribute("aria-label", `${shortName} value`);
+    valueInput.value = (currentComposition[i] * sliderDisplayFactor(col)).toFixed(1);
+    valueInput.dataset.idx = i;
+    valueInput.dataset.col = col;
+    attachValueEditHandlers(valueInput, i, col, b);
+    label.append(nameSpan, valueInput);
 
     const input = document.createElement("input");
     input.type = "range";
@@ -302,13 +368,30 @@ function toggleIngredientInfo(group, key) {
 }
 
 // --- Slider Preview (hover composition preview) ---
+// Update both the range input position and the editable value display.
+// The value display is an <input> for regular sliders (click-to-edit) and a
+// <span> for the Material Source row. We must use `.value` for inputs and
+// `.textContent` for spans, and we must NOT clobber an in-progress edit
+// (the focused element).
 function syncSliderDOM(comp, updateValues = true) {
   if (!_sliderInputs) return;
   for (const slider of _sliderInputs) {
     const idx = parseInt(slider.dataset.idx);
     if (updateValues) slider.value = comp[idx];
-    document.getElementById(`val-${idx}`).textContent =
-      (comp[idx] * sliderDisplayFactor(slider.dataset.col)).toFixed(1);
+    setValueDisplay(idx, (comp[idx] * sliderDisplayFactor(slider.dataset.col)).toFixed(1));
+  }
+}
+
+function setValueDisplay(idx, formatted) {
+  const el = document.getElementById(`val-${idx}`);
+  if (!el) return;
+  // Don't clobber an in-progress click-to-edit. The blur/Enter handlers will
+  // refresh the display once the edit commits or reverts.
+  if (el === document.activeElement) return;
+  if (el.tagName === "INPUT") {
+    el.value = formatted;
+  } else {
+    el.textContent = formatted;
   }
 }
 
@@ -328,10 +411,18 @@ function showSliderPreview(comp) {
       marker.className = "slider-preview-marker";
       slider.parentElement.insertBefore(marker, slider.nextSibling);
     }
-    // Account for range input thumb inset (thumb center at min is ~9px from left edge)
-    const thumbHalf = 9;
+    // Account for range input thumb inset (thumb center at min is `thumbHalf`
+    // px from each edge of the input box). The half-width is exposed as a
+    // CSS variable on `.slider-group` so the desktop (9 px) and mobile
+    // (8 px, smaller thumb) values stay in sync with the actual rendered
+    // thumb size — falls back to 9 if the variable isn't set.
+    // `slider.offsetLeft` is 0 on desktop (the slider is a full-width child of
+    // `.slider-group`), but on mobile the slider lives in column 2 of a CSS grid
+    // so we must include its offset within the positioning parent.
+    const thumbHalfRaw = getComputedStyle(slider.parentElement).getPropertyValue("--thumb-half");
+    const thumbHalf = parseFloat(thumbHalfRaw) || 9;
     const trackWidth = slider.offsetWidth - 2 * thumbHalf;
-    const leftPx = thumbHalf + fraction * trackWidth;
+    const leftPx = slider.offsetLeft + thumbHalf + fraction * trackWidth;
     marker.style.left = leftPx + "px";
     // Align vertically with the slider thumb center
     marker.style.top = `${slider.offsetTop + slider.offsetHeight / 2}px`;
@@ -357,7 +448,7 @@ function onSliderChange(e) {
   currentComposition[idx] = parseFloat(e.target.value);
   displayPreviewComp[idx] = currentComposition[idx];
   const displayVal = currentComposition[idx] * sliderDisplayFactor(e.target.dataset.col);
-  document.getElementById(`val-${idx}`).textContent = displayVal.toFixed(1);
+  setValueDisplay(idx, displayVal.toFixed(1));
   _sliderActive = true;
   if (_sliderIdleTimer) clearTimeout(_sliderIdleTimer);
   _sliderIdleTimer = setTimeout(() => { _sliderActive = false; update(); }, 150);
@@ -397,8 +488,16 @@ function updateSliderLabels() {
 // --- Animated transition to a new composition ---
 function animateToComposition(targetComp) {
   if (animationId) cancelAnimationFrame(animationId);
+  // A scatter-click animation supersedes any in-flight Material Source curve
+  // transition: the new composition takes over and we recompute the curve
+  // from the lerped composition each frame.
+  _msCurveTransition = null;
   hideExtrapolationWarning(); // suppress during transition
   startAnimLoop();
+
+  // Track the *intended* end state so a click-to-edit during this animation
+  // can build the new target from un-clobbered values. Cleared on completion.
+  _lastAnimTarget = [...targetComp];
 
   const startComp = [...currentComposition];
   const duration = 350; // ms
@@ -422,6 +521,7 @@ function animateToComposition(targetComp) {
       animationId = requestAnimationFrame(step);
     } else {
       animationId = null;
+      _lastAnimTarget = null;
       // Snap to exact target and update toggle
       setComposition(targetComp);
       // Sequenced: update insight after the curve has settled
@@ -433,16 +533,111 @@ function animateToComposition(targetComp) {
   animationId = requestAnimationFrame(step);
 }
 
+// --- Material Source curve-level transition ---
+// Material Source is a binary categorical input; feeding the GP fractional
+// values (0.5) gives a noisy intermediate prediction outside the training
+// distribution. Instead, snapshot the pre-toggle posterior curve, commit the
+// new MS value to `currentComposition`, and let `drawStrengthCurve` blend
+// the cached `from` curve with each frame's freshly computed `to` curve over
+// `MS_TRANSITION_MS`. The result is a smooth visual that respects the GP's
+// input domain.
+const MS_TRANSITION_MS = 350;
+function triggerMaterialSourceTransition(idx, newVal) {
+  if (!strengthParams) {
+    // Predictor not yet initialized — fall back to instant commit so the UI
+    // still responds. (Should not happen in practice; init() awaits params.)
+    currentComposition[idx] = newVal;
+    displayPreviewComp[idx] = newVal;
+    return;
+  }
+  if (currentComposition[idx] === newVal) return; // no-op
+
+  // Snapshot pre-toggle curve at fixed 64-point log-spaced times. Same time
+  // grid is reused throughout the blend so per-frame work is just a lerp.
+  const times = logSpacedTimes(64);
+  const { means: fromMeans, variances: fromVars } = predictStrengthCurve(
+    currentComposition, times, strengthParams
+  );
+  const fromStds = computeStds(fromVars, strengthParams);
+
+  // Commit the new MS value before kicking off the visual blend so the GP
+  // calls during the transition use the post-toggle composition.
+  currentComposition[idx] = newVal;
+  displayPreviewComp[idx] = newVal;
+
+  _msCurveTransition = {
+    startTime: performance.now(),
+    duration: MS_TRANSITION_MS,
+    times,
+    fromMeans,
+    fromStds,
+  };
+  startAnimLoop();
+}
+
+// --- Click-to-edit value handlers (regular sliders only) ---
+// The plan: focus selects all; Enter commits; Escape reverts; blur commits.
+// On commit, parse the displayed (unit-aware) number, divide by the column's
+// display factor, clamp to [b.min, b.max], and animate to the new state.
+function attachValueEditHandlers(inputEl, idx, col, b) {
+  function commit() {
+    const raw = inputEl.value.trim();
+    const parsed = parseFloat(raw);
+    if (!Number.isFinite(parsed)) {
+      // Non-numeric → revert displayed text
+      inputEl.value = (currentComposition[idx] * sliderDisplayFactor(col)).toFixed(1);
+      return;
+    }
+    // Convert displayed value back to internal units, then clamp
+    const internal = parsed / sliderDisplayFactor(col);
+    const clamped = Math.max(b.min, Math.min(b.max, internal));
+    // Build target from the most recent intended end state to avoid landing
+    // mid-animation values for sliders that are currently in flight.
+    const base = animationId !== null && _lastAnimTarget !== null
+      ? [..._lastAnimTarget]
+      : [...currentComposition];
+    base[idx] = clamped;
+    animateToComposition(base);
+    // Refresh display in case clamping or rounding changed it (the animation
+    // will overwrite, but we want the input to read correctly during the lerp
+    // since `setValueDisplay` skips focused elements — and this element is
+    // still focused if commit was triggered by Enter).
+    inputEl.value = (clamped * sliderDisplayFactor(col)).toFixed(1);
+  }
+  inputEl.addEventListener("focus", () => inputEl.select());
+  inputEl.addEventListener("keydown", (e) => {
+    if (e.key === "Enter") {
+      e.preventDefault();
+      commit();
+      inputEl.blur();
+    } else if (e.key === "Escape") {
+      e.preventDefault();
+      // Revert without committing
+      inputEl.value = (currentComposition[idx] * sliderDisplayFactor(col)).toFixed(1);
+      inputEl.blur();
+    }
+  });
+  inputEl.addEventListener("blur", () => {
+    // Blur commits the edit (same as Enter), but only if the value was changed.
+    // If the value matches the current displayed state, do nothing.
+    const expected = (currentComposition[idx] * sliderDisplayFactor(col)).toFixed(1);
+    if (inputEl.value.trim() !== expected) commit();
+  });
+}
+
 // --- Set sliders from a composition (instant) ---
 function setComposition(comp) {
   currentComposition = [...comp];
   displayPreviewComp = [...comp];
   syncSliderDOM(comp);
-  // Update Material Source toggle
+  // Update Material Source toggle (val-${msIdx} is a <span>, not an <input>,
+  // so we write textContent directly. syncSliderDOM only iterates range
+  // sliders, which doesn't include Material Source.)
   const msIdx = COL_MS;
   if (msIdx >= 0) {
     const msVal = Math.round(comp[msIdx]);
-    document.getElementById(`val-${msIdx}`).textContent = msVal === 0 ? "Source A" : "Source B";
+    const msEl = document.getElementById(`val-${msIdx}`);
+    if (msEl) msEl.textContent = msVal === 0 ? "Source A" : "Source B";
     const buttons = document.querySelectorAll(".toggle-btn");
     if (buttons.length >= 2) {
       buttons[0].className = msVal === 0 ? "toggle-btn active" : "toggle-btn";
@@ -475,7 +670,6 @@ function updateMixInsight() {
   if (!mixAnalyses) return;
 
   const nearIdx = findNearestCompositionIdx(currentComposition);
-  const objectivesKey = `${scatterDay}_${scatterXAxis}`;
 
   // Update Pareto pill independently (instant, no content swap needed)
   if (nearIdx !== null) {
@@ -524,7 +718,6 @@ function getParetoTag(idx) {
   if (!strPreds) return null;
 
   const n = gwpPreds.length;
-  const xLabel = scatterXAxis === "cost" ? "Cost" : "GWP";
 
   // Check if idx is Pareto-optimal for current x-axis vs strength
   const xVals = scatterXAxis === "cost"
@@ -751,22 +944,41 @@ function drawStrengthCurve() {
   const { ctx, W, H } = setupHiDPICanvas(canvas);
   const pad = { top: 20, right: 20, bottom: 40, left: 70 };
 
-  // Compute predictions (use log-spaced time points for smooth early-time resolution)
-  const isAnimating = animationId !== null;
-  const isInteracting = _sliderActive || isAnimating;
-  const nPts = isInteracting ? 32 : 64;
-  // Log-spaced points: denser at early times where variance changes fastest
-  const times = Array.from({ length: nPts }, (_, i) => {
-    const t01 = i / (nPts - 1); // uniform in [0,1]
-    return (Math.pow(29, t01) - 1); // inverse of log10(t+1)/log10(29)
-  });
-  const { means, variances } = predictStrengthCurve(
-    currentComposition, times, strengthParams
-  );
-  const stds = variances.map((v) => {
-    const noiseVar = strengthParams.noise_variance * strengthParams.y_std * strengthParams.y_std;
-    return Math.sqrt(v + noiseVar);
-  });
+  // Compute predictions (use log-spaced time points for smooth early-time resolution).
+  // Two paths:
+  //   (1) Material Source transition active — blend cached pre-toggle curve
+  //       with freshly computed post-toggle curve over MS_TRANSITION_MS.
+  //   (2) Otherwise — standard predict at current composition.
+  let times, means, stds, nPts;
+  if (_msCurveTransition !== null) {
+    const elapsed = performance.now() - _msCurveTransition.startTime;
+    const t = Math.min(elapsed / _msCurveTransition.duration, 1);
+    if (t >= 1) {
+      _msCurveTransition = null; // fall through to standard path
+    } else {
+      const ease = easeInOutCubic(t);
+      times = _msCurveTransition.times;
+      nPts = times.length;
+      const { means: toMeans, variances: toVars } = predictStrengthCurve(
+        currentComposition, times, strengthParams
+      );
+      const toStds = computeStds(toVars, strengthParams);
+      const { fromMeans, fromStds } = _msCurveTransition;
+      means = fromMeans.map((m, i) => m + (toMeans[i] - m) * ease);
+      stds = fromStds.map((s, i) => s + (toStds[i] - s) * ease);
+    }
+  }
+  if (means === undefined) {
+    const isAnimating = animationId !== null;
+    const isInteracting = _sliderActive || isAnimating;
+    nPts = isInteracting ? 32 : 64;
+    times = logSpacedTimes(nPts);
+    const { means: m, variances } = predictStrengthCurve(
+      currentComposition, times, strengthParams
+    );
+    means = m;
+    stds = computeStds(variances, strengthParams);
+  }
 
   // Dynamic Y range: floor at 16500 psi (max observed: 16029), expands smoothly if needed
   // _curveYMax is stored in RAW (psi) space to be unit-invariant — prevents visual drift
@@ -1298,10 +1510,7 @@ let previewTarget = null; // composition we're interpolating TOWARD (set on hove
 let displayPreviewComp = null; // always-valid interpolated composition (initialized on load)
 let isPreviewActive = false; // true when hovering a scatter point
 const PREVIEW_PTS = 48;
-const previewTimesCache = Array.from({ length: PREVIEW_PTS }, (_, i) => {
-  const t01 = i / (PREVIEW_PTS - 1);
-  return (Math.pow(29, t01) - 1);
-});
+const previewTimesCache = logSpacedTimes(PREVIEW_PTS);
 
 function isCompositionConverged() {
   for (let i = 0; i < displayPreviewComp.length; i++) {
@@ -1376,7 +1585,7 @@ function animLoop(now) {
   const hasCurveAnim = Math.abs(curveObsHoverScale - curveHoverTarget) > 0.01;
   const hasObsAnim = Math.abs(obsOpacity - obsTarget) > 0.01;
   const hasYAxisAnim = _curveYMaxTarget !== null && Math.abs(_curveYMax - _curveYMaxTarget) > 0.5;
-  if (!previewConverged || isPreviewActive || hasHoverAnim || hasCurveAnim || hasObsAnim || hasYAxisAnim || animationId !== null || scatterTransition !== null || unitTransition !== null) {
+  if (!previewConverged || isPreviewActive || hasHoverAnim || hasCurveAnim || hasObsAnim || hasYAxisAnim || animationId !== null || scatterTransition !== null || unitTransition !== null || _msCurveTransition !== null) {
     animLoopId = requestAnimationFrame(animLoop);
   } else {
     animLoopId = null;
@@ -1740,6 +1949,21 @@ document.addEventListener("invalidate-scatter", () => {
   _canvasCache.delete(canvas);
   update();
 });
+
+// --- Test hook (gated behind ?test=1 to avoid leaking internals in prod) ---
+// Exposes a tiny readonly view of internal state used only by Playwright specs.
+if (typeof location !== "undefined" &&
+    new URLSearchParams(location.search).get("test") === "1") {
+  window.__test = {
+    get currentComposition() { return currentComposition ? [...currentComposition] : null; },
+    get displayPreviewComp() { return displayPreviewComp ? [...displayPreviewComp] : null; },
+    // Whether the Material Source curve-level transition is currently in
+    // flight. Used by the smooth-transition regression test in
+    // `preview-curve.spec.ts` — it's the deterministic alternative to
+    // racing screenshot timing against the 350 ms blend window.
+    get isMsCurveTransitionActive() { return _msCurveTransition !== null; },
+  };
+}
 
 // --- Start ---
 init();

@@ -1,6 +1,8 @@
 # BOxCrete: Bayesian Optimization for Sustainable Concrete Mix Design
 
-Concrete, the second most widely used material in the world, accounts for **6–8% of global anthropogenic CO₂ emissions**, largely due to Portland cement production (~0.8 tons CO₂ per ton of cement). Partial replacement with Supplementary Cementitious Materials (SCMs) such as fly ash, slag, and natural pozzolan reduces embodied carbon and often improves durability, but high SCM usage makes compressive strength a highly nonlinear function of multiple interacting mix parameters, rendering traditional design empirical and trial-and-error driven. To systematically navigate this complex composition space, data-driven frameworks are needed.
+> 🌐 **[Try the interactive explorer →](https://facebookresearch.github.io/SustainableConcrete/)** — predict concrete strength from mix composition in your browser, no installation needed.
+
+Concrete, the second most widely used material in the world, accounts for **6–8% of global anthropogenic CO₂ emissions**, largely due to Portland cement production (~0.8 tons CO₂ per ton of cement).
 Here, we introduce BOxCrete, an open-source Bayesian optimization framework for probabilistic strength curve prediction and sustainable mix design.
 We invite researchers and practitioners from all disciplines including AI, machine learning, computer science, materials science, and civil engineering
 to collaborate on discovering more sustainable concrete formulations that are applicable

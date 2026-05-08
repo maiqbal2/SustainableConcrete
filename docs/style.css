@@ -427,8 +427,11 @@ h2 {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08), inset 0 0 0 1px var(--border);
 }
 
-/* Sliders panel */
-.sliders { grid-column: 1; overflow-y: auto; max-height: 80vh; position: relative; }
+/* Sliders panel
+   Note: no `max-height` / `overflow-y` here — the panel grows to fit all
+   ingredient rows naturally on desktop. The references panel in column 3 is
+   typically taller, so the composition panel still ends within the page flow. */
+.sliders { grid-column: 1; position: relative; }
 .sliders-header {
   display: flex;
   align-items: center;
@@ -436,14 +439,58 @@ h2 {
   margin-bottom: 0.25rem;
 }
 .sliders-header h2 { margin: 0; }
-.slider-group { margin-bottom: 0.75rem; }
+.slider-group { margin-bottom: 0.55rem; }
 .slider-group label {
   display: flex;
+  /* Vertically align name text with the value-input's text. Without
+     `align-items: center` the default `stretch` makes the name span and
+     the value-input fill the row's full height, but the name text sits
+     at the top of the line box while the value-input's text sits in its
+     own vertical middle — visually offset. Centering the children's
+     content axes pins them to the same baseline. */
+  align-items: center;
   justify-content: space-between;
   font-size: 0.8rem;
   margin-bottom: 2px;
 }
 .slider-group label span { font-weight: 600; }
+
+/* Click-to-edit composition value (regular sliders only — not Material Source).
+   Visual treatment mirrors `.toggle-btn`: rectilinear with 4px radius and
+   accent-colored focus border, matching the existing glass-morph language.
+   Width is 6.5ch to accommodate the worst-case formatted value across both
+   unit systems — e.g. water 700 kg/m³ in lb/yd³ = `1180.6` (six chars). */
+.slider-value {
+  font: inherit;
+  font-weight: 600;
+  text-align: end;
+  width: 6.5ch;
+  min-width: 6.5ch;
+  padding: 2px 4px;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  cursor: text;
+  transition: background 0.15s, border-color 0.15s;
+  /* Hide native number-input spinners (defensive — input type is `text` here
+     but `inputmode=decimal` may map to spinner controls in some engines). */
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.slider-value::-webkit-inner-spin-button,
+.slider-value::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.slider-value:hover {
+  background: rgba(var(--card-bg-rgb), 0.4);
+}
+.slider-value:focus {
+  outline: none;
+  border-color: var(--accent);
+  background: rgba(var(--card-bg-rgb), 0.6);
+}
 .slider-group input[type=range] {
   width: 100%;
   cursor: pointer;
@@ -481,21 +528,35 @@ h2 {
 /* Slider preview marker (shown on scatter hover) — hollow circle like a ghost thumb */
 .slider-group {
   position: relative;
+  /* Half the rendered thumb width, exposed as a CSS variable so the JS
+     marker-positioning math (`showSliderPreview` in ui.mjs) can derive
+     the same value via `getComputedStyle(...).getPropertyValue('--thumb-half')`.
+     Mobile overrides this to 8 px because the thumb is shrunk to 16 px
+     in the @media block below; without that override, the preview marker
+     sat 1 px off-track on mobile. */
+  --thumb-half: 9px;
 }
-/* Clickable ingredient names */
+/* Clickable ingredient names.
+   Use `text-decoration` instead of `border-bottom` for the dashed
+   underline so the line sits at the font's natural baseline-offset
+   (just under the glyphs) rather than below the descender — saves a
+   few pixels of vertical space per row, especially noticeable on
+   mobile where every ingredient row is stacked. */
 .ingredient-name {
   cursor: pointer;
-  border-bottom: 1px dashed var(--text-secondary);
-  transition: color 0.15s, border-color 0.15s;
+  text-decoration: underline dashed var(--text-secondary);
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+  transition: color 0.15s, text-decoration-color 0.15s;
 }
 .ingredient-name:hover {
   color: var(--accent);
-  border-color: var(--accent);
+  text-decoration-color: var(--accent);
 }
 .ingredient-name.active {
   color: var(--accent);
-  border-bottom-style: solid;
-  border-color: var(--accent);
+  text-decoration-style: solid;
+  text-decoration-color: var(--accent);
 }
 
 /* Ingredient insight panel */
@@ -735,6 +796,17 @@ h2 {
   background: rgba(var(--card-bg-rgb), 0.5);
   color: var(--text);
   transition: border-color 0.15s;
+  /* Hide native number spinner buttons. Chromium shows them by default,
+     which steals ~14 px on the right and clips the "min"/"max"
+     placeholders to "mi"/"ma". Mobile browsers don't render spinners,
+     which is why the bug only manifested on desktop. */
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+.filter-row input[type=number]::-webkit-inner-spin-button,
+.filter-row input[type=number]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
 }
 .filter-row input[type=number]:focus {
   border-color: var(--accent);
@@ -865,7 +937,7 @@ h2 {
   margin: 0.1rem 0;
 }
 .ref-desc {
-  font-size: 0.75rem;
+  font-size: 0.82rem;
   color: var(--text);
   line-height: 1.4;
   margin: 0.2rem 0 0;
@@ -1224,11 +1296,129 @@ a.ref-link {
     font-size: 0.78rem;
   }
 
-  /* Sliders content inside unified panel */
-  .mobile-sliders-view .slider-group { margin-bottom: 0.4rem; }
-  .mobile-sliders-view .slider-group label { font-size: 0.72rem; }
+  /* Sliders content inside unified panel.
+     Mobile uses a vertical multi-row layout:
+       row 1: <label> with name (LEFT) and value-input (RIGHT) — full panel
+              content width via the base flex-between rule.
+       row 2: <input type=range> CENTERED, narrower than the panel so the
+              row 1 / row 3 edge labels (name↔min on the left, value↔max on
+              the right) stack vertically without the slider getting in
+              their way.
+       row 3: <div class="info-row"> with min (LEFT) and max (RIGHT) —
+              also full panel content width.
+     Vertical spacing is tightened so the three rows feel like a single
+     compact block (small label margin-bottom, small slider-group
+     margin-bottom). */
+  .mobile-sliders-view .slider-group {
+    margin-bottom: 0.3rem;
+    /* `.slider-group` is `position: relative` for the slider preview marker
+       (set globally above). */
+  }
+  .mobile-sliders-view .slider-group label {
+    /* Inherits `display: flex; justify-content: space-between` from the base
+       rule — name on the left, value-input on the right. 0.85rem matches
+       the mobile h2 size and bumps legibility on touch devices; both the
+       name span and the value-input inherit this size (the input uses
+       `font: inherit`). The mobile-value-fit specs assert the resulting
+       6.5ch input still fits within the panel at 320 px. */
+    font-size: 0.85rem;
+    margin-bottom: 0;
+  }
+  .mobile-sliders-view .slider-group .slider-value {
+    /* Tap-target tuning: ensure ≥ 32px height for thumbs while keeping
+       the rectilinear 4px radius. */
+    min-height: 32px;
+    padding: 4px 6px;
+  }
+  .mobile-sliders-view .slider-group input[type=range] {
+    /* Constrain the slider track to a centered, fixed-but-responsive width
+       so it sits in the middle of the panel rather than spanning the full
+       width. `min(60vw, 220px)` is comfortable on phones from 320 px up:
+         320 px viewport → 60vw = 192 px (capped to 192 px)
+         412 px viewport → 60vw = 247 px (capped to 220 px)
+       `display: block; margin: 4px auto;` centers horizontally and adds a
+       small breathing margin from the label above and info-row below. */
+    width: min(60vw, 220px);
+    display: block;
+    margin: 4px auto;
+  }
+  /* Smaller thumb on mobile reduces the intrinsic thumb-half-width inset
+     (was 9 px for the 18 px desktop thumb). 16 px is still a comfortable
+     touch target combined with the row's vertical generosity. The CSS
+     variable below keeps the JS slider-preview-marker math in sync —
+     `showSliderPreview` reads `--thumb-half` from the slider-group. */
+  .mobile-sliders-view .slider-group {
+    --thumb-half: 8px;
+  }
+  .mobile-sliders-view .slider-group input[type=range]::-webkit-slider-thumb {
+    width: 16px;
+    height: 16px;
+  }
+  .mobile-sliders-view .slider-group input[type=range]::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+  }
+  .mobile-sliders-view .slider-group .info-row {
+    /* Right-align the max-bound text to the same pixel column as the
+       `.slider-value` input's rendered glyph end. The value input has
+       1 px border + 6 px right padding = 7 px inset; matching that here
+       lines up the displayed value with the printed maximum exactly.
+       Left padding is zeroed so the minimum bound aligns with the
+       left-aligned ingredient name above. */
+    padding: 0 7px 0 0;
+  }
+  /* Material Source row on mobile: hide the redundant value-span (the active
+     toggle button is self-labeling). The toggle row sits below the label as
+     a normal block-flow child, just like an `input[type=range]` would. */
+  .mobile-sliders-view .material-source-group label > span:last-child {
+    display: none;
+  }
 
-  h2 { font-size: 0.85rem; }
+  /* --- Mobile legibility tuning ---
+     Touch-device read distances and older-eye comfort favour ~16 px (= 1rem)
+     for body copy. Bump the panel-body text and section headers uniformly
+     so the hierarchy stays consistent. We deliberately leave layout-tight
+     components (`.controls`, `.filter-row`, `.site-header h1`) at their
+     existing sizes to avoid wrapping or clipping in chrome that's already
+     space-constrained on small screens. */
+  h2 { font-size: 0.95rem; }
+  .mix-insight-text,
+  .ingredient-insight-text,
+  .ref-desc {
+    /* Bumped from 0.82–0.85rem. Keeps the three panels typographically
+       unified — the `font-uniformity.spec.ts` invariant still holds. */
+    font-size: 0.95rem;
+    line-height: 1.5;
+  }
+  .mix-insight-title,
+  .ingredient-insight-title {
+    /* Uppercase pill labels: bump enough to be comfortably readable but
+       still smaller than the body so the hierarchy reads "header → body". */
+    font-size: 0.85rem;
+  }
+  .references-panel h3 {
+    font-size: 0.95rem;
+  }
+  .ref-authors {
+    /* Author byline directly under the ref title. Was 0.75rem; bump
+       slightly to keep up with the 0.95rem ref-desc above. */
+    font-size: 0.85rem;
+  }
+  .readouts {
+    /* Override the earlier `font-size: 0.78rem` block above with a more
+       legible 0.88rem for the GWP / Cost / W/B readout strip. */
+    font-size: 0.88rem;
+  }
+  /* Hide the W/B (water-to-binder ratio) readout on mobile. With the bumped
+     0.88rem font, GWP + Cost already fill the strip; adding W/B forces a
+     wrap that steals vertical space from the strength curve canvas above.
+     Power users on mobile still have the slider readouts to infer water/
+     binder; W/B remains visible on desktop where there's room. */
+  .wb-readout { display: none; }
+  .mobile-hint {
+    /* Italic instructional hint inside the unified mobile panel header. */
+    font-size: 0.8rem;
+  }
 }
 
 /* Landscape mobile — panels side by side */

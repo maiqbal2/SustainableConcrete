@@ -5,6 +5,71 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
   <title>BOxCrete – Interactive Concrete Strength Explorer</title>
   <meta name="theme-color" content="#e8edf3">
+
+  <!-- SEO -->
+  <meta name="description" content="Interactive Bayesian Optimization explorer for sustainable concrete: predict 28-day compressive strength, GWP, and cost from mix composition in your browser.">
+  <meta name="author" content="Sebastian Ament; BOxCrete authors">
+  <link rel="canonical" href="https://facebookresearch.github.io/SustainableConcrete/">
+
+  <!-- Open Graph (Facebook, LinkedIn, Slack, iMessage, Discord) -->
+  <meta property="og:type" content="website">
+  <meta property="og:site_name" content="BOxCrete">
+  <meta property="og:title" content="BOxCrete – Interactive Concrete Strength Explorer">
+  <meta property="og:description" content="Predict concrete compressive strength, GWP, and cost from mix composition. A Bayesian Optimization model running entirely in your browser.">
+  <meta property="og:url" content="https://facebookresearch.github.io/SustainableConcrete/">
+  <meta property="og:image" content="https://facebookresearch.github.io/SustainableConcrete/og-image.jpg">
+  <meta property="og:image:width" content="1200">
+  <meta property="og:image:height" content="630">
+  <meta property="og:image:alt" content="BOxCrete: a close-up photograph of fresh concrete, used as the social-share thumbnail for the interactive explorer.">
+
+  <!-- Twitter / X Card -->
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:title" content="BOxCrete – Interactive Concrete Strength Explorer">
+  <meta name="twitter:description" content="Predict concrete compressive strength, GWP, and cost from mix composition. A Bayesian Optimization model running entirely in your browser.">
+  <meta name="twitter:image" content="https://facebookresearch.github.io/SustainableConcrete/og-image.jpg">
+
+  <!-- iOS share sheet uses apple-touch-icon as a fallback thumbnail -->
+  <link rel="apple-touch-icon" href="og-image.jpg">
+
+  <!-- Schema.org structured data: WebApplication + scholarly citations -->
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "WebApplication",
+    "name": "BOxCrete",
+    "alternateName": "BOxCrete Interactive Concrete Strength Explorer",
+    "url": "https://facebookresearch.github.io/SustainableConcrete/",
+    "description": "Bayesian Optimization model for predicting concrete compressive strength, global warming potential, and cost from mix composition. Runs entirely in the browser.",
+    "applicationCategory": "EngineeringApplication",
+    "operatingSystem": "Any",
+    "browserRequirements": "Requires JavaScript and a modern browser",
+    "offers": {
+      "@type": "Offer",
+      "price": "0",
+      "priceCurrency": "USD"
+    },
+    "author": [
+      {"@type": "Person", "name": "Bayezid Baten"},
+      {"@type": "Person", "name": "M. Ayyan Iqbal"},
+      {"@type": "Person", "name": "Sebastian Ament"},
+      {"@type": "Person", "name": "Julius Kusuma"},
+      {"@type": "Person", "name": "Nishant Garg"}
+    ],
+    "citation": [
+      {
+        "@type": "ScholarlyArticle",
+        "name": "BOxCrete: A Bayesian Optimization Open-Source AI Model for Concrete Strength Forecasting and Mix Optimization",
+        "url": "https://arxiv.org/abs/2603.21525"
+      },
+      {
+        "@type": "ScholarlyArticle",
+        "name": "Sustainable Concrete via Bayesian Optimization",
+        "url": "https://arxiv.org/abs/2310.18288"
+      }
+    ]
+  }
+  </script>
+
   <link rel="icon" type="image/svg+xml" href="favicon.svg">
   <link rel="stylesheet" href="style.css">
   <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -154,7 +219,7 @@
         <div class="readouts" id="readouts">
           <div>GWP: <span class="value" id="gwp-value">–</span> <span class="unit" id="gwp-unit">kg CO₂/m³</span></div>
           <div>Cost: <span class="value" id="cost-value">–</span> <span id="cost-uncertainty"></span> <span class="unit" id="cost-unit">$/m³</span></div>
-          <div>W/B: <span class="value" id="wb-value">–</span></div>
+          <div class="wb-readout">W/B: <span class="value" id="wb-value">–</span></div>
           <!-- TODO: Add Slump readout once model/slump.json is available. -->
         </div>
       </div>

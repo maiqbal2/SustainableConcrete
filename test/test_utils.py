@@ -304,7 +304,7 @@ class TestConstraintFunction(unittest.TestCase):
             ),
         ]
     )
-    def test_constraint_functions(self, name, func, columns, lower, upper):
+    def test_constraint_functions(self, _name, func, columns, lower, upper):
         self._verify(func(columns, lower, upper))
 
     def test_get_constraints_concrete_defaults(self):
@@ -397,7 +397,7 @@ class TestBoundsFunction(unittest.TestCase):
             ("mortar", DEFAULT_X_COLUMNS, MORTAR_BOUNDS_DICT),
         ]
     )
-    def test_get_bounds(self, name, columns, bounds_dict):
+    def test_get_bounds(self, _name, columns, bounds_dict):
         bounds = get_bounds(columns, bounds_dict)
         self.assertEqual(bounds.shape, (2, len(columns)))
         self.assertTrue(torch.all(bounds[0] <= bounds[1]))
