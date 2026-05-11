@@ -183,9 +183,6 @@ function buildSliders() {
   const bounds = compositionsData.slider_bounds;
   const colNames = compositionsData.column_names;
 
-  // Skip MRWR (always 0 in dataset — no range)
-  const skipCols = new Set(["MRWR (kg/m3)"]);
-
   // Use median composition as initial values
   const compositions = compositionsData.compositions;
   const n = compositions.length;
@@ -195,7 +192,6 @@ function buildSliders() {
 
   for (let i = 0; i < colNames.length; i++) {
     const col = colNames[i];
-    if (skipCols.has(col)) continue;
 
     // Material Source gets a toggle instead of a slider
     if (col === "Material Source") {
@@ -486,7 +482,7 @@ function updateSliderLabels() {
   let rowIdx = 0;
   for (let i = 0; i < colNames.length; i++) {
     const col = colNames[i];
-    if (col === "MRWR (kg/m3)" || col === "Material Source") continue;
+    if (col === "Material Source") continue;
     const b = bounds[col];
     if (b.min === b.max) continue;
     if (rowIdx < infoRows.length) {
@@ -1760,7 +1756,6 @@ function setupEventListeners() {
   function createFilterColOptions() {
     let html = '<optgroup label="Composition">';
     for (let i = 0; i < colNames.length; i++) {
-      if (colNames[i] === "MRWR (kg/m3)") continue;
       html += `<option value="${i}">${colNames[i].replace(" (kg/m3)", "")}</option>`;
     }
     html += '</optgroup><optgroup label="Computed">';

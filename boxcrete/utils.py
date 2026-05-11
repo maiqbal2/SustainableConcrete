@@ -38,14 +38,13 @@ _TOTAL_MASS_NAMES = _PASTE_CONTENT_NAMES + [
     "HRWR (kg/m3)",
     "Coarse Aggregates (kg/m3)",
     "Fine Aggregate (kg/m3)",
-]  # MRWR excluded: negligible contribution to total mass
+]
 DEFAULT_X_COLUMNS = [
     "Cement (kg/m3)",
     "Fly Ash (kg/m3)",
     "Slag (kg/m3)",
     "Water (kg/m3)",
     "HRWR (kg/m3)",
-    "MRWR (kg/m3)",
     "Fine Aggregate (kg/m3)",
     "Coarse Aggregates (kg/m3)",
     "Material Source",
@@ -72,10 +71,6 @@ CONCRETE_BOUNDS_DICT = {
     "Coarse Aggregates (kg/m3)": (0, 1600),
     "Fine Aggregate (kg/m3)": (400, 2600),
     "Material Source": (0, 1),
-    "MRWR (kg/m3)": (
-        0,
-        1,
-    ),  # effectively zero in training data; small range avoids NaN in normalization
     "Temp (C)": (0, 40),
     "Time": (0, 28),
 }
@@ -380,6 +375,28 @@ def load_concrete_strength(
         - Output columns: "GWP", "Strength (Mean)", "Strength (Std)".
         - Optionally "# of measurements" for computing standard errors.
 
+    Notes on dataset conventions (these aren't enforced here, but are good
+    to know if you write code that consumes the loaded `SustainableConcreteDataset`):
+
+    - **`Strength (Std)` is the SAMPLE standard deviation** (`ddof=1`) of the
+      strength replicates `Strength1/2/3 (psi)` — not the population stdev.
+      Verified empirically against ~647 of 727 rows in `data/boxcrete_data.csv`.
+    - **`# of measurements` is curated**, not always equal to
+      `count(non-null Strength1, Strength2, Strength3)`. A handful of rows
+      encode information about which replicates were valid (e.g. sentinel
+      zeros from cylinders that failed at handling). The loader uses this
+      column to weight observation noise variances accordingly.
+    - **`GWP` is essentially deterministic** in `(composition, Material Source)`:
+      the regression coefficients in `DEFAULT_GWP_COEFFICIENTS` reproduce
+      the column to R² ≈ 1 per Material Source class (see
+      `test_gwp_linearity` in `test/test_utils.py`).
+    - **HRWR** is recorded in `kg/m³`. To convert to the field-conventional
+      `oz/cwt of binder`, use:
+          ``oz/cwt = HRWR (kg/m³) / Binder (kg/m³) × 1533.3 / ρ``
+      where `Binder = Cement + Fly Ash + Slag` and ρ is the assumed HRWR
+      liquid density (g/mL). A reasonable global default is ρ = 1.10 g/mL
+      (typical polycarboxylate-based product).
+
     Args:
         data_path: Path to a CSV file or a pandas DataFrame. Defaults to
             `DATA_PATH` (``data/boxcrete_data.csv``).
@@ -573,7 +590,7 @@ def get_bounds(
     bounds_dict.setdefault("HRWR (kg/m3)", (0, 0.1 * max_binder))
 
     # Columns not in bounds_dict get (0, 0) bounds (e.g. Coarse Aggregates in
-    # mortar mode, or MRWR when not relevant).
+    # mortar mode).
     bounds = torch.tensor([bounds_dict.get(col, (0, 0)) for col in X_columns]).T
     logger.info("The lower and upper bounds for the respective variables are set to:")
     for col, bound in zip(X_columns, bounds.T):
@@ -732,25 +749,19 @@ def get_cement_replacement_constraints(
 def get_total_water_reducer_constraints(
     X_columns: list[str], lower: float, upper: float
 ) -> list[T_CONSTRAINT]:
-    """Constrains the total water reducer (HRWR + optional MRWR) to binder ratio.
-
-    If ``"MRWR (kg/m3)"`` is present in ``X_columns`` it is included in the
-    numerator; otherwise only ``"HRWR (kg/m3)"`` is used.
+    """Constrains the HRWR / binder ratio.
 
     Args:
         X_columns: Column names of the input features.
-        lower: Lower bound on the water-reducer / binder ratio.
-        upper: Upper bound on the water-reducer / binder ratio.
+        lower: Lower bound on the HRWR / binder ratio.
+        upper: Upper bound on the HRWR / binder ratio.
 
     Returns:
         A list of inequality constraint tuples.
     """
-    numerator_names = ["HRWR (kg/m3)"]
-    if "MRWR (kg/m3)" in X_columns:
-        numerator_names.append("MRWR (kg/m3)")
     return get_proportional_sum_constraints(
         X_columns=X_columns,
-        numerator_names=numerator_names,
+        numerator_names=["HRWR (kg/m3)"],
         denominator_names=_TOTAL_BINDER_NAMES,
         lower=lower,
         upper=upper,
@@ -918,7 +929,6 @@ DEFAULT_COST_COEFFICIENTS: dict[str, tuple[float, float]] = {
     "Slag (kg/m3)": (0.09, 0.015),  # $70-120/ton; transport-dependent
     "Water (kg/m3)": (0.002, 0.001),  # Municipal rates, negligible
     "HRWR (kg/m3)": (3.00, 0.90),  # $2000-5000/ton; brand/supplier variation
-    "MRWR (kg/m3)": (2.00, 0.50),  # $1500-3000/ton
     "Fine Aggregate (kg/m3)": (0.02, 0.006),  # $10-30/ton; transport-heavy
     "Coarse Aggregates (kg/m3)": (0.015, 0.005),  # $10-25/ton; transport-heavy
 }

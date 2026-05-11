@@ -121,7 +121,12 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: notebooks-mode-${{ matrix.optimization-mode }}
+          # Include both matrix dimensions in the name so the four matrix
+          # jobs upload to four distinct artifact slots. Without `include-cost`
+          # in the name the (cost=true) job for each optimization-mode races
+          # the (cost=false) job and the loser hits a 409 Conflict from the
+          # upload-artifact action.
+          name: notebooks-mode-${{ matrix.optimization-mode }}-cost-${{ matrix.include-cost }}
           path: notebooks/prediction_and_optimization_tutorial.ipynb
           retention-days: 7
 
