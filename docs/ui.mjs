@@ -5,6 +5,12 @@
  */
 
 import { predictStrengthCurve, predictStrengthMeanOnly, predictGWP, predictCost, initStrengthModel, initWASM } from "./gp.mjs";
+import {
+  UNITS,
+  compToDisplay,
+  compFromDisplay,
+  sliderUnitLabel as sliderUnitLabelFor,
+} from "./units.mjs";
 
 // --- Shared Helpers ---
 function easeInOutCubic(t) {
@@ -68,20 +74,8 @@ let _msCurveTransition = null; // {startTime, duration, times, fromMeans, fromSt
 
 // --- Unit System ---
 let unitSystem = "metric"; // "metric" or "imperial"
-const UNITS = {
-  metric: {
-    strength: "MPa", strengthFactor: 1 / 145.04, // psi → MPa
-    mass: "kg/m³", massFactor: 1,
-    gwp: "kg CO₂/m³", gwpFactor: 1,
-    cost: "$/m³", costFactor: 1,
-  },
-  imperial: {
-    strength: "psi", strengthFactor: 1, // already psi
-    mass: "lb/yd³", massFactor: 1.6856, // kg/m³ → lb/yd³
-    gwp: "lb CO₂/yd³", gwpFactor: 1.6856,
-    cost: "$/yd³", costFactor: 1 / 1.30795, // $/m³ → $/yd³
-  },
-};
+// `UNITS` is imported from `./units.mjs` (single source of truth, also used
+// by the Node-based `test/test_js_units.mjs` parity tests).
 function U() { return UNITS[unitSystem]; }
 
 // Animated unit transition
@@ -294,11 +288,22 @@ function buildSliders() {
     // negative values are ever entered (no need for `-` key on iOS Safari).
     valueInput.inputMode = "decimal";
     valueInput.setAttribute("aria-label", `${shortName} value`);
-    valueInput.value = (currentComposition[i] * sliderDisplayFactor(col)).toFixed(1);
+    valueInput.value = displayCompValue(col, currentComposition[i]).toFixed(1);
     valueInput.dataset.idx = i;
     valueInput.dataset.col = col;
     attachValueEditHandlers(valueInput, i, col, b);
-    label.append(nameSpan, valueInput);
+
+    // Per-row unit suffix (kg/m³ ↔ lb/yd³ on toggle; °C for Temperature).
+    // Wrapped in a flex container so the label keeps its two-child
+    // `space-between` layout (name on the left, value+unit packed on the right).
+    const valueWrap = document.createElement("span");
+    valueWrap.className = "slider-value-wrap";
+    const unitSpan = document.createElement("span");
+    unitSpan.className = "slider-unit";
+    unitSpan.id = `unit-${i}`;
+    unitSpan.textContent = sliderUnitLabel(col);
+    valueWrap.append(valueInput, unitSpan);
+    label.append(nameSpan, valueWrap);
 
     const input = document.createElement("input");
     input.type = "range";
@@ -378,7 +383,7 @@ function syncSliderDOM(comp, updateValues = true) {
   for (const slider of _sliderInputs) {
     const idx = parseInt(slider.dataset.idx);
     if (updateValues) slider.value = comp[idx];
-    setValueDisplay(idx, (comp[idx] * sliderDisplayFactor(slider.dataset.col)).toFixed(1));
+    setValueDisplay(idx, displayCompValue(slider.dataset.col, comp[idx]).toFixed(1));
   }
 }
 
@@ -447,7 +452,7 @@ function onSliderChange(e) {
   const idx = parseInt(e.target.dataset.idx);
   currentComposition[idx] = parseFloat(e.target.value);
   displayPreviewComp[idx] = currentComposition[idx];
-  const displayVal = currentComposition[idx] * sliderDisplayFactor(e.target.dataset.col);
+  const displayVal = displayCompValue(e.target.dataset.col, currentComposition[idx]);
   setValueDisplay(idx, displayVal.toFixed(1));
   _sliderActive = true;
   if (_sliderIdleTimer) clearTimeout(_sliderIdleTimer);
@@ -458,14 +463,23 @@ function onSliderChange(e) {
   checkExtrapolationWarning();
 }
 
-// Display factor for a slider column — temperature is never converted
-function sliderDisplayFactor(colName) {
-  if (colName.includes("Temp")) return 1;
-  return U().massFactor;
+// Display value for a composition column under the active unit system.
+// Handles both mass (factor) and temperature (factor + offset).
+function displayCompValue(colName, internal) {
+  return compToDisplay(colName, internal, unitSystem);
+}
+// Inverse of `displayCompValue`: parse a user-typed display value back to
+// the model-native (kg/m³ or °C) value before clamping/storage.
+function internalCompValue(colName, display) {
+  return compFromDisplay(colName, display, unitSystem);
+}
+// Unit suffix label for a slider column (delegates to `units.mjs`).
+function sliderUnitLabel(colName) {
+  return sliderUnitLabelFor(colName, unitSystem);
 }
 function updateSliderLabels() {
   syncSliderDOM(currentComposition, false);
-  // Update info rows (min/max labels)
+  // Update info rows (min/max labels) and per-row unit suffixes
   const bounds = compositionsData.slider_bounds;
   const colNames = compositionsData.column_names;
   const infoRows = document.querySelectorAll("#sliders .info-row");
@@ -476,12 +490,16 @@ function updateSliderLabels() {
     const b = bounds[col];
     if (b.min === b.max) continue;
     if (rowIdx < infoRows.length) {
-      const factor = sliderDisplayFactor(col);
-      const minDisp = (b.min * factor).toFixed(0);
-      const maxDisp = (b.max * factor).toFixed(0);
+      // Use offset-aware converter so temperature bounds render correctly
+      // in °F (e.g. -20°C → -4°F, 22°C → 72°F) under imperial.
+      const minDisp = displayCompValue(col, b.min).toFixed(0);
+      const maxDisp = displayCompValue(col, b.max).toFixed(0);
       infoRows[rowIdx].innerHTML = `<span>${minDisp}</span><span>${maxDisp}</span>`;
       rowIdx++;
     }
+    // Refresh per-row unit suffix (kg/m³ ↔ lb/yd³, °C ↔ °F)
+    const unitEl = document.getElementById(`unit-${i}`);
+    if (unitEl) unitEl.textContent = sliderUnitLabel(col);
   }
 }
 
@@ -585,11 +603,12 @@ function attachValueEditHandlers(inputEl, idx, col, b) {
     const parsed = parseFloat(raw);
     if (!Number.isFinite(parsed)) {
       // Non-numeric → revert displayed text
-      inputEl.value = (currentComposition[idx] * sliderDisplayFactor(col)).toFixed(1);
+      inputEl.value = displayCompValue(col, currentComposition[idx]).toFixed(1);
       return;
     }
-    // Convert displayed value back to internal units, then clamp
-    const internal = parsed / sliderDisplayFactor(col);
+    // Convert displayed value back to internal units, then clamp.
+    // For Temperature this also handles the °F → °C offset.
+    const internal = internalCompValue(col, parsed);
     const clamped = Math.max(b.min, Math.min(b.max, internal));
     // Build target from the most recent intended end state to avoid landing
     // mid-animation values for sliders that are currently in flight.
@@ -602,7 +621,7 @@ function attachValueEditHandlers(inputEl, idx, col, b) {
     // will overwrite, but we want the input to read correctly during the lerp
     // since `setValueDisplay` skips focused elements — and this element is
     // still focused if commit was triggered by Enter).
-    inputEl.value = (clamped * sliderDisplayFactor(col)).toFixed(1);
+    inputEl.value = displayCompValue(col, clamped).toFixed(1);
   }
   inputEl.addEventListener("focus", () => inputEl.select());
   inputEl.addEventListener("keydown", (e) => {
@@ -613,14 +632,14 @@ function attachValueEditHandlers(inputEl, idx, col, b) {
     } else if (e.key === "Escape") {
       e.preventDefault();
       // Revert without committing
-      inputEl.value = (currentComposition[idx] * sliderDisplayFactor(col)).toFixed(1);
+      inputEl.value = displayCompValue(col, currentComposition[idx]).toFixed(1);
       inputEl.blur();
     }
   });
   inputEl.addEventListener("blur", () => {
     // Blur commits the edit (same as Enter), but only if the value was changed.
     // If the value matches the current displayed state, do nothing.
-    const expected = (currentComposition[idx] * sliderDisplayFactor(col)).toFixed(1);
+    const expected = displayCompValue(col, currentComposition[idx]).toFixed(1);
     if (inputEl.value.trim() !== expected) commit();
   });
 }

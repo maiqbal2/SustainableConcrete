@@ -455,6 +455,37 @@ h2 {
 }
 .slider-group label span { font-weight: 600; }
 
+/* Per-row unit suffix in the composition setter (e.g. `kg/m³` / `lb/yd³`,
+   or `°C` for the temperature row). The wrap container packs the value
+   input and the unit together at the right side of the label, preserving
+   the row's two-child `space-between` layout (name on the left, value+unit
+   on the right). The wrap's `padding-right` matches `.info-row { padding: 0 2px }`
+   so the unit text and the max-bound text share the same right baseline.
+   Tight `gap` keeps the value+unit reading as a single typographic unit
+   (e.g. "353.0 kg/m³"), without the chunky empty space a wider gap creates. */
+.slider-value-wrap {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.15ch;
+  padding-right: 2px;
+}
+/* Override `.slider-group label span { font-weight: 600 }` — the unit
+   should read as a quiet suffix, not as bold as the value. Same
+   selector specificity (0,2,1) as the bold rule, declared after it so
+   the cascade order picks this one up.
+   No fixed-width slot here: the unit hugs its content so the value
+   doesn't have a gap on its right. The cost is a ~1 character shift of
+   the value column on metric ↔ imperial toggle (`kg/m³` 5ch vs `lb/yd³`
+   6ch) — much less noticeable than a permanent empty gap in the
+   default (metric) view. */
+.slider-group label .slider-unit {
+  font-weight: 400;
+  font-size: 0.72rem;
+  opacity: 0.65;
+  white-space: nowrap;
+  text-align: right;
+}
+
 /* Click-to-edit composition value (regular sliders only — not Material Source).
    Visual treatment mirrors `.toggle-btn`: rectilinear with 4px radius and
    accent-colored focus border, matching the existing glass-morph language.
@@ -1134,10 +1165,13 @@ a.ref-link {
 .mobile-sliders-view.fading { opacity: 0; }
 .mobile-scroll-content { display: contents; }
 
-/* Site footer — subtle credit with frosted glass pill */
+/* Site footer — subtle credit with frosted glass pill.
+   `padding: 0.75rem 0` matches `.layout { gap: 0.75rem }` so the pill sits
+   at the same vertical inset from the bottom of the tallest column as
+   columns are spaced from each other. */
 .site-footer {
   text-align: center;
-  padding: 1.5rem 0 0.75rem;
+  padding: 0.75rem 0;
 }
 .site-footer span {
   display: inline-flex;
@@ -1329,6 +1363,13 @@ a.ref-link {
        the rectilinear 4px radius. */
     min-height: 32px;
     padding: 4px 6px;
+  }
+  /* Mobile info-row uses `padding: 0 7px 0 0` (see below) to align the
+     max-bound text with the value input's right edge. Match that here so
+     the unit text in the value+unit wrap shares the same right baseline
+     as the max bound. */
+  .mobile-sliders-view .slider-group .slider-value-wrap {
+    padding-right: 7px;
   }
   .mobile-sliders-view .slider-group input[type=range] {
     /* Constrain the slider track to a centered, fixed-but-responsive width
