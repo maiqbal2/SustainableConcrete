@@ -279,30 +279,31 @@ test.describe("mobile slider multi-row layout", () => {
     expect(valSpanIsHidden).toBe(true);
   });
 
-  test("value input glyph end aligns with info-row max bound (right-edge)", async ({ page }) => {
-    // The value input has `text-align: end`; its rendered glyph sits at
-    // `box.right - borderRight - paddingRight`. The info-row max span is
-    // pushed against the info-row's right inset. We use the same 7 px right
-    // inset on the info-row so both right-edges land on the same x.
+  test("unit suffix right edge aligns with info-row max bound (right-edge)", async ({ page }) => {
+    // The composition setter renders [value-input][unit-suffix] on each row,
+    // with the wrap right-padded to match the `.info-row` right inset
+    // (mobile: 7 px). The unit `<span>` has `text-align: right`, so its
+    // bounding-box right edge IS the rendered glyph end.
+    //
+    // (Pre-units, this test pinned the value-input's text right edge against
+    // the max bound; the unit suffix moved that contract to the unit span,
+    // which now anchors the row's right baseline.)
     const verdict = await page
       .locator(".mobile-sliders-view .slider-group")
       .first()
       .evaluate((group) => {
-        const val = group.querySelector(".slider-value") as HTMLElement | null;
+        const unit = group.querySelector(".slider-unit") as HTMLElement | null;
         const info = group.querySelector(".info-row") as HTMLElement | null;
         const maxSpan = info?.querySelector("span:last-child") as HTMLElement | null;
-        if (!val || !info || !maxSpan) return null;
-        const cs = getComputedStyle(val);
-        const borderRight = parseFloat(cs.borderRightWidth) || 0;
-        const padRight = parseFloat(cs.paddingRight) || 0;
-        const valTextRight = val.getBoundingClientRect().right - borderRight - padRight;
+        if (!unit || !info || !maxSpan) return null;
+        const unitTextRight = unit.getBoundingClientRect().right;
         const maxRight = maxSpan.getBoundingClientRect().right;
-        return { valTextRight, maxRight };
+        return { unitTextRight, maxRight };
       });
-    expect(verdict, "value input + info-row max should be measurable").not.toBeNull();
+    expect(verdict, "unit suffix + info-row max should be measurable").not.toBeNull();
     expect(
-      Math.abs(verdict!.valTextRight - verdict!.maxRight),
-      `value glyph end (${verdict!.valTextRight}) should align with max bound (${verdict!.maxRight})`,
+      Math.abs(verdict!.unitTextRight - verdict!.maxRight),
+      `unit text end (${verdict!.unitTextRight}) should align with max bound (${verdict!.maxRight})`,
     ).toBeLessThanOrEqual(1);
   });
 

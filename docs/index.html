@@ -8,7 +8,8 @@
 
   <!-- SEO -->
   <meta name="description" content="Interactive Bayesian Optimization explorer for sustainable concrete: predict 28-day compressive strength, GWP, and cost from mix composition in your browser.">
-  <meta name="author" content="Sebastian Ament; BOxCrete authors">
+  <meta name="author" content="Sebastian Ament">
+  <link rel="author" href="https://sebastianament.github.io">
   <link rel="canonical" href="https://facebookresearch.github.io/SustainableConcrete/">
 
   <!-- Open Graph (Facebook, LinkedIn, Slack, iMessage, Discord) -->
@@ -48,13 +49,11 @@
       "price": "0",
       "priceCurrency": "USD"
     },
-    "author": [
-      {"@type": "Person", "name": "Bayezid Baten"},
-      {"@type": "Person", "name": "M. Ayyan Iqbal"},
-      {"@type": "Person", "name": "Sebastian Ament"},
-      {"@type": "Person", "name": "Julius Kusuma"},
-      {"@type": "Person", "name": "Nishant Garg"}
-    ],
+    "author": {
+      "@type": "Person",
+      "name": "Sebastian Ament",
+      "url": "https://sebastianament.github.io"
+    },
     "citation": [
       {
         "@type": "ScholarlyArticle",
@@ -76,10 +75,13 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap" rel="stylesheet">
   <script>
-    // Apply theme before render to avoid flash
+    // Apply theme before render to avoid flash.
+    // Default is dark for everyone unless they have an explicit stored
+    // preference (set via the theme-toggle button). We deliberately do NOT
+    // honor `prefers-color-scheme` so the brand experience is consistent
+    // across visitors regardless of OS appearance settings.
     function getEffectiveTheme() {
-      return localStorage.getItem('boxcrete-theme') ||
-        (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+      return localStorage.getItem('boxcrete-theme') || 'dark';
     }
     function applyTheme() {
       const theme = getEffectiveTheme();
@@ -264,7 +266,7 @@
   </main>
 
   <footer class="site-footer">
-    <span>Explorer designed by <a href="https://sebastianament.github.io" target="_blank" rel="noopener">Sebastian Ament</a></span>
+    <span>Explorer designed by <a href="https://sebastianament.github.io" target="_blank" rel="author noopener">Sebastian Ament</a></span>
   </footer>
 
   <script type="module" src="ui.mjs"></script>
@@ -273,10 +275,6 @@
     document.getElementById('theme-toggle').addEventListener('click', () => {
       const current = getEffectiveTheme();
       localStorage.setItem('boxcrete-theme', current === 'light' ? 'dark' : 'light');
-      applyTheme();
-    });
-    window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', () => {
-      localStorage.removeItem('boxcrete-theme');
       applyTheme();
     });
     // Unit toggle (dispatches custom event for ui.mjs to listen to)
