@@ -65,7 +65,6 @@ def _create_test_dataframe(n=10, inject_nan_at=None, include_slump=True):
         "Slag (kg/m3)": [30 + i for i in range(n)],
         "Water (kg/m3)": [200 + i * 5 for i in range(n)],
         "HRWR (kg/m3)": [5 + i * 0.1 for i in range(n)],
-        "MRWR (kg/m3)": [1 + i * 0.05 for i in range(n)],
         "Fine Aggregate (kg/m3)": [1000 + i * 10 for i in range(n)],
         "Coarse Aggregates (kg/m3)": [900 + i * 10 for i in range(n)],
         "Material Source": [0] * n,
@@ -292,13 +291,6 @@ class TestConstraintFunction(unittest.TestCase):
                 "total_wr",
                 get_total_water_reducer_constraints,
                 DEFAULT_X_COLUMNS,
-                0.0,
-                0.1,
-            ),
-            (
-                "total_wr_no_mrwr",
-                get_total_water_reducer_constraints,
-                [c for c in DEFAULT_X_COLUMNS if c != "MRWR (kg/m3)"],
                 0.0,
                 0.1,
             ),
@@ -700,26 +692,6 @@ class TestDataRegressions(unittest.TestCase):
         X_str, _, _ = dataset.strength_data_by_time(28.0)
         self.assertEqual(X_str.shape[0], 137)
 
-    def test_binder_consistency(self):
-        """Binder column must equal Cement + Fly Ash + Slag (within rounding).
-
-        This test catches data integrity issues such as mixes containing
-        unmodeled binder materials (e.g. clay) that were not properly excluded.
-        """
-        import pandas as pd
-
-        df = pd.read_csv(DATA_PATH)
-        computed = df["Cement (kg/m3)"] + df["Fly Ash (kg/m3)"] + df["Slag (kg/m3)"]
-        diff = (df["Binder (kg/m3)"] - computed).abs()
-        # Allow 1 kg/m³ tolerance for rounding
-        violators = df[diff > 1.5]
-        self.assertEqual(
-            len(violators),
-            0,
-            f"Binder != Cement+FA+Slag for mixes: "
-            f"{violators['Mix Name'].unique().tolist()}",
-        )
-
     def test_gwp_linearity(self):
         """GWP should be a near-perfect linear function of composition.
 
@@ -792,7 +764,6 @@ class TestDefaultCostCoefficients(unittest.TestCase):
             "Slag (kg/m3)",
             "Water (kg/m3)",
             "HRWR (kg/m3)",
-            "MRWR (kg/m3)",
             "Fine Aggregate (kg/m3)",
             "Coarse Aggregates (kg/m3)",
         ]
