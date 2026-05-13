@@ -12,6 +12,7 @@ from boxcrete.models import (
     get_strength_gp_input_transform,
     PartialFixedNoiseLikelihood,
     SustainableConcreteModel,
+    WithinGroupShrinkagePrior,
 )
 from boxcrete.plotting import (
     compute_loo_cv,
@@ -80,6 +81,7 @@ __all__ = [
     "SustainableConcreteDataset",
     "SustainableConcreteModel",
     "UnitSystem",
+    "WithinGroupShrinkagePrior",
     "compute_loo_cv",
     "convert_slump",
     "convert_strength",
