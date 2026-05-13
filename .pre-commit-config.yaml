@@ -1,0 +1,30 @@
+# Local pre-commit hooks. Mirrors the CI lint gate in
+# .github/workflows/tests.yml so that "passes locally" implies
+# "passes the lint job on CI".
+#
+# One-time setup:
+#   pip install -e ".[dev]"     # installs pre-commit + pinned black
+#   pre-commit install          # registers the git hook
+#
+# Manual run across all tracked files (matches the CI invocation):
+#   pre-commit run --all-files
+repos:
+  - repo: https://github.com/psf/black
+    # Pinned to match the CI lint job. Keep this in sync with the
+    # `black==X.Y.Z` constraint in pyproject.toml's [project.optional-dependencies].dev.
+    rev: 26.3.1
+    hooks:
+      - id: black
+
+  - repo: https://github.com/pycqa/flake8
+    rev: 7.1.1
+    hooks:
+      - id: flake8
+        # CI's hard gate: fail only on syntax errors / undefined names.
+        # Style warnings are reported but non-blocking on CI, and we keep
+        # the same posture locally to avoid pre-commit becoming a nag.
+        args:
+          - --count
+          - --select=E9,F63,F7,F82
+          - --show-source
+          - --statistics
