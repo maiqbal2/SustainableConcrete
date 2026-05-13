@@ -71,6 +71,9 @@ GWPvsStrength.png
 # Planning files
 *.plan.md
 
+# Local `make test-notebooks` output (executed copies of notebooks).
+.notebook-runs/
+
 # E2E / Playwright / Lighthouse CI
 node_modules/
 playwright-report/
