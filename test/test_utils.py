@@ -670,26 +670,34 @@ class TestDataRegressions(unittest.TestCase):
     dataset itself is intentionally changed.
     """
 
+    @classmethod
+    def setUpClass(cls):
+        # Share the loaded dataset across the four DEFAULT_Y_COLUMNS tests.
+        # Saves four CSV reads per run.
+        cls.dataset = load_concrete_strength(data_path=DATA_PATH)
+
     def test_default_data_size(self):
-        dataset = load_concrete_strength(data_path=DATA_PATH)
-        self.assertEqual(dataset.X.shape[0], 647)
-        self.assertEqual(dataset.X.shape[1], len(DEFAULT_X_COLUMNS))
+        self.assertEqual(self.dataset.X.shape[0], 647)
+        self.assertEqual(self.dataset.X.shape[1], len(DEFAULT_X_COLUMNS))
 
     def test_gwp_data_count(self):
-        dataset = load_concrete_strength(data_path=DATA_PATH)
-        X_gwp, _, _, _ = dataset.gwp_data
+        X_gwp, _, _, _ = self.dataset.gwp_data
         self.assertEqual(X_gwp.shape[0], 144)
 
     def test_slump_data_count(self):
-        dataset = load_concrete_strength(data_path=DATA_PATH, Y_columns=SLUMP_Y_COLUMNS)
+        # setUpClass loads with DEFAULT_Y_COLUMNS (no slump column), so we
+        # need a fresh load with SLUMP_Y_COLUMNS for .slump_data to populate.
+        dataset = load_concrete_strength(
+            data_path=DATA_PATH,
+            Y_columns=SLUMP_Y_COLUMNS,
+        )
         # Slump data unchanged even with SLUMP_Y_COLUMNS
         self.assertEqual(dataset.X.shape[0], 647)
         X_sl, _, _, _ = dataset.slump_data
         self.assertEqual(X_sl.shape[0], 64)
 
     def test_strength_28d_count(self):
-        dataset = load_concrete_strength(data_path=DATA_PATH)
-        X_str, _, _ = dataset.strength_data_by_time(28.0)
+        X_str, _, _ = self.dataset.strength_data_by_time(28.0)
         self.assertEqual(X_str.shape[0], 137)
 
     def test_gwp_linearity(self):
@@ -699,9 +707,8 @@ class TestDataRegressions(unittest.TestCase):
         This is a stronger check than the model-level test because it operates
         directly on the data without model construction.
         """
-        dataset = load_concrete_strength(data_path=DATA_PATH)
-        X, Y, _, _ = dataset.gwp_data
-        ms_col = dataset.X_columns[:-1].index("Material Source")
+        X, Y, _, _ = self.dataset.gwp_data
+        ms_col = self.dataset.X_columns[:-1].index("Material Source")
 
         for ms_val in X[:, ms_col].unique():
             mask = X[:, ms_col] == ms_val

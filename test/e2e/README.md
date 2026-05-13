@@ -37,6 +37,7 @@ property on a PR, add a spec for it before merging.
 | `preview-curve.spec.ts`       | `displayPreviewComp` matches `currentComposition` after Material Source toggle | desktop |
 | `preview-curve.spec.ts`       | Mix Insight description is refreshed (not stale) after Material Source toggle | desktop |
 | `preview-curve.spec.ts`       | Strength curve transition state is active right after MS toggle and clears after ~350 ms | desktop |
+| `lengthscale-identifiability.spec.ts` | Served `docs/model/strength.json` has every feature lengthscale below 100 (else sliders go unresponsive) | desktop |
 | `font-uniformity.spec.ts`     | `.mix-insight-text`, `.ingredient-insight-text`, `.ref-desc` share computed font size | desktop+mobile |
 | `og-meta.spec.ts`             | Required Open Graph + Twitter Card meta tags present with expected content | desktop |
 | `og-meta.spec.ts`             | `og-image.jpg` is reachable, JPEG, and within 50–250 KB budget            | desktop |

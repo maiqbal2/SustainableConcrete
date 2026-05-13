@@ -21,17 +21,25 @@ import os
 import sys
 
 import torch
+from botorch.utils.multi_objective import is_non_dominated
 from linear_operator.utils.cholesky import psd_safe_cholesky
 
-# Add repo root to path
-REPO_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-sys.path.insert(0, REPO_DIR)
+# Add repo root to path so the script is runnable from anywhere
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from boxcrete.models import SustainableConcreteModel
-from boxcrete.utils import load_concrete_strength
+from boxcrete.models import SustainableConcreteModel  # noqa: E402
+from boxcrete.utils import REPO_DIR, load_concrete_strength  # noqa: E402
 
 OUTPUT_DIR = os.path.join(REPO_DIR, "docs", "model")
 STRENGTH_DAYS = [1, 28]
+
+# CI-blocking threshold for per-feature Matern lengthscales. Anything at or
+# above this in the model's normalised input space means the GP has stopped
+# distinguishing inputs along that dimension — the corresponding website
+# slider would become unresponsive. The model's optimiser upper bound is 1e3
+# (see `boxcrete.models.fit_strength_gp::LogTransformedInterval`); the cap
+# here is one order of magnitude tighter.
+LENGTHSCALE_IDENTIFIABILITY_CAP = 100.0
 
 
 def to_list(t):
@@ -101,6 +109,13 @@ def export_strength_model(model, data):
         "n_train": train_X.shape[0],
         "n_real": n_real,
         "pseudo_noise": pseudo_noise,
+        # Feature names in production order (Time is the last dim, fed via
+        # input transforms). Stripping the unit suffix from
+        # ``data.X_columns`` keeps these consumer-friendly.
+        "feature_names": [c.split(" (")[0] for c in data.X_columns],
+        # CI-blocking lengthscale cap: see scripts/export_model.py and
+        # test/test_lengthscale_identifiability.py.
+        "lengthscale_identifiability_cap": LENGTHSCALE_IDENTIFIABILITY_CAP,
         # Kernel hyperparameters
         "matern_lengthscales": to_list(matern_scale.base_kernel.lengthscale.squeeze()),
         "matern_outputscale": matern_scale.outputscale.item(),
@@ -204,8 +219,6 @@ def export_compositions(model, data):
             strength_preds[str(day)] = to_list(post.mean.squeeze(-1))
 
     # Compute Pareto mask (GWP vs 28-day strength, both maximized in model space)
-    from botorch.utils.multi_objective import is_non_dominated
-
     Y_pareto = torch.stack([gwp_means, torch.tensor(strength_preds["28"])], dim=-1)
     pareto_mask = is_non_dominated(Y_pareto)
 
@@ -303,6 +316,12 @@ def export_test_vectors(model, data):
 
 def main():
     os.makedirs(OUTPUT_DIR, exist_ok=True)
+
+    # Seed for reproducibility. The lengthscale-sync regression test
+    # (test/test_lengthscale_identifiability.py::test_committed_strength_matches_fresh_fit)
+    # uses the same seed and tight tolerances to catch the case where the
+    # committed strength.json wasn't regenerated after a data change.
+    torch.manual_seed(0)
 
     print("Loading data...")
     data = load_concrete_strength()
