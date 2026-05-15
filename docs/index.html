@@ -104,7 +104,7 @@
     <span class="header-tagline">Interactive Concrete Strength Explorer</span>
     <nav class="header-links">
       <a href="#" id="about-link">About</a>
-      <a href="https://www.youtube.com/watch?v=PHuAG_jZMD8" target="_blank" rel="noopener">Video</a>
+      <a href="#" id="video-link">Video</a>
       <a href="https://github.com/facebookresearch/SustainableConcrete" target="_blank" rel="noopener">GitHub</a>
     </nav>
     <div class="header-actions">
@@ -127,7 +127,7 @@
   <!-- About Modal Overlay -->
   <div class="about-overlay" id="about-overlay">
     <div class="about-modal">
-      <button class="about-close" id="about-close" aria-label="Close">&times;</button>
+      <button class="about-close" aria-label="Close" data-modal-close>&times;</button>
       <h2>About This Explorer</h2>
       <p>This tool predicts concrete compressive strength using a Gaussian Process model trained on laboratory mortar and concrete specimens. Predictions reflect controlled lab conditions and <strong>may differ from field performance</strong> due to batching variability, curing environment, and aggregate properties.</p>
       <h3>How to Use</h3>
@@ -142,6 +142,20 @@
       <h3>Papers</h3>
       <p><a href="https://arxiv.org/abs/2603.21525" target="_blank" rel="noopener">Baten, Iqbal, Ament, Kusuma, &amp; Garg (2026)</a> — BOxCrete: A Bayesian Optimization Open-Source AI Model for Concrete Strength Forecasting and Mix Optimization.<br>
       <a href="https://arxiv.org/abs/2310.18288" target="_blank" rel="noopener">Ament, Witte, Garg, &amp; Kusuma (2023)</a> — Sustainable Concrete via Bayesian Optimization.</p>
+    </div>
+  </div>
+
+  <!-- Video Modal Overlay -->
+  <div class="video-overlay" id="video-overlay">
+    <div class="video-modal">
+      <button class="video-close" aria-label="Close" data-modal-close>&times;</button>
+      <div class="video-frame-wrap">
+        <iframe id="video-iframe"
+                title="BOxCrete video"
+                allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
+                allowfullscreen
+                referrerpolicy="strict-origin-when-cross-origin"></iframe>
+      </div>
     </div>
   </div>
 
@@ -417,20 +431,50 @@
       });
     }
 
+    // Generic modal: handles close button ([data-modal-close]), backdrop click,
+    // and Escape key. Optional onOpen/onClose hooks let callers run side effects
+    // (e.g. lazy-loading the video iframe).
+    function setupModal(overlay, { onOpen, onClose } = {}) {
+      const close = () => {
+        overlay.classList.remove('visible');
+        onClose?.();
+      };
+      const open = () => {
+        onOpen?.();
+        overlay.classList.add('visible');
+      };
+      for (const btn of overlay.querySelectorAll('[data-modal-close]')) {
+        btn.addEventListener('click', close);
+      }
+      overlay.addEventListener('click', (e) => {
+        if (e.target === overlay) close();
+      });
+      document.addEventListener('keydown', (e) => {
+        if (e.key === 'Escape' && overlay.classList.contains('visible')) close();
+      });
+      return { open, close };
+    }
+
     // About modal
-    const aboutOverlay = document.getElementById('about-overlay');
+    const aboutModal = setupModal(document.getElementById('about-overlay'));
     document.getElementById('about-link').addEventListener('click', (e) => {
       e.preventDefault();
-      aboutOverlay.classList.add('visible');
+      aboutModal.open();
     });
-    document.getElementById('about-close').addEventListener('click', () => {
-      aboutOverlay.classList.remove('visible');
+
+    // Video modal — iframe src is set on open (lazy load) and cleared on close
+    // (stops playback, frees player). Clearing is deferred until after the
+    // fade-out so users don't see a brief black flash where the video was.
+    const videoIframe = document.getElementById('video-iframe');
+    const VIDEO_EMBED_SRC = 'https://www.youtube-nocookie.com/embed/PHuAG_jZMD8?rel=0&autoplay=1';
+    const VIDEO_FADE_MS = 250; // matches .video-overlay opacity transition
+    const videoModal = setupModal(document.getElementById('video-overlay'), {
+      onOpen: () => { videoIframe.src = VIDEO_EMBED_SRC; },
+      onClose: () => { setTimeout(() => { videoIframe.src = ''; }, VIDEO_FADE_MS); },
     });
-    aboutOverlay.addEventListener('click', (e) => {
-      if (e.target === aboutOverlay) aboutOverlay.classList.remove('visible');
-    });
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') aboutOverlay.classList.remove('visible');
+    document.getElementById('video-link').addEventListener('click', (e) => {
+      e.preventDefault();
+      videoModal.open();
     });
   </script>
 </body>

@@ -53,7 +53,7 @@ test.describe("header layout", () => {
     const selectors = [
       ".site-header h1",
       "#about-link",
-      'a[href*="youtube.com"]',
+      'a[href*="youtube.com"], #video-link',
       'a[href*="github.com/facebookresearch"]',
       ".theme-toggle",
     ];
