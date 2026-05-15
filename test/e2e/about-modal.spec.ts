@@ -17,7 +17,7 @@ test.describe("about modal", () => {
     await expect(overlay).toHaveClass(/visible/);
     await expect(page.locator(".about-modal h2")).toBeVisible();
 
-    await page.locator("#about-close").click();
+    await page.locator(".about-overlay [data-modal-close]").click();
     await expect(overlay).not.toHaveClass(/visible/);
   });
 
