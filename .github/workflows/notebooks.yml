@@ -26,6 +26,9 @@ on:
 env:
   FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
+permissions:
+  contents: read
+
 jobs:
   # Notebooks that use BOXCRETE_OPTIMIZATION_MODE run in both mortar and concrete modes
   mode-dependent-notebooks:
