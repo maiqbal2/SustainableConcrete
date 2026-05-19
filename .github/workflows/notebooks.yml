@@ -253,6 +253,12 @@ jobs:
               try:
                   with open(nb_path, 'r', encoding='utf-8') as f:
                       nb = nbformat.read(f, as_version=4)
+                  # `read` only checks parseability; `validate` enforces
+                  # the nbformat schema. Without this, schema mismatches
+                  # (e.g. cell `id` fields requiring nbformat_minor>=5)
+                  # only surface as ERROR-level log lines during the much
+                  # slower `nbconvert --execute` step and don't fail CI.
+                  nbformat.validate(nb)
                   print(f"✅ Valid notebook: {nb_path}")
               except Exception as e:
                   errors.append(f"❌ Invalid notebook {nb_path}: {e}")
